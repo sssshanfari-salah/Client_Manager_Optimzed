@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/python code/main.py'],
+    ['C:/Users/ssssh/OneDrive/Documents/Client_Manager_optimized/python code/main.py'],
     pathex=[],
     binaries=[],
-    datas=[('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/starco_icon.ico', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/clients.json', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/python code/country_codes.json', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/python code/Shops_Elect_meters.json', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/python code/docs/documents.txt', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/supporting_documents/starco_rent_contract_1.pdf', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/supporting_documents', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/starco icon', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/python code', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/python code/docs', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/Clients', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/application_outputs', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/application_outputs/clients_logs', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/application_outputs/tasks_logs', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/application_outputs/observation_logs', '.')],
+    datas=[('C:/Users/ssssh/OneDrive/Documents/Client_Manager_optimized/starco_icon.ico', '.'), ('C:/Users/ssssh/OneDrive/Documents/Client_Manager_optimized/clients.json', '.'), ('C:/Users/ssssh/OneDrive/Documents/Client_Manager_optimized/python code/country_codes.json', '.'), ('C:/Users/ssssh/OneDrive/Documents/Client_Manager_optimized/python code/Shops_Elect_meters.json', '.'), ('C:/Users/ssssh/OneDrive/Documents/Client_Manager_optimized/python code/docs/documents.txt', '.'), ('C:/Users/ssssh/OneDrive/Documents/Client_Manager_optimized/supporting_documents/starco_rent_contract_1.pdf', '.'), ('C:/Users/ssssh/OneDrive/Documents/Client_Manager_optimized/supporting_documents', '.'), ('C:/Users/ssssh/OneDrive/Documents/Client_Manager_optimized/starco icon', '.'), ('C:/Users/ssssh/OneDrive/Documents/Client_Manager_optimized/python code', '.'), ('C:/Users/ssssh/OneDrive/Documents/Client_Manager_optimized/python code/docs', '.'), ('C:/Users/ssssh/OneDrive/Documents/Client_Manager_optimized/Clients', '.'), ('C:/Users/ssssh/OneDrive/Documents/Client_Manager_optimized/application_outputs', '.'), ('C:/Users/ssssh/OneDrive/Documents/Client_Manager_optimized/application_outputs/clients_logs', '.'), ('C:/Users/ssssh/OneDrive/Documents/Client_Manager_optimized/application_outputs/tasks_logs', '.'), ('C:/Users/ssssh/OneDrive/Documents/Client_Manager_optimized/application_outputs/observation_logs', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -35,5 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/starco_icon.ico'],
+    icon=['C:/Users/ssssh/OneDrive/Documents/Client_Manager_optimized/starco_icon.ico'],
 )
