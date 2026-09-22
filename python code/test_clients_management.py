@@ -33,6 +33,7 @@ from clients_progress_ui import (
     resolve_log_output_dir,
     set_language,
     strip_task_number_prefix,
+    user_registeration,
     validate_translation_coverage,
 )
 from sync_documents import TARGET
@@ -144,6 +145,51 @@ class ClientManagerTests(unittest.TestCase):
         self.assertEqual(manager.clients[0].email, "noura@example.com")
         self.assertEqual(manager.clients[0].shop_number, "12")
         self.assertEqual(manager.clients[0].reviews[0]["review"], "Great service")
+
+    def test_user_registration_uses_only_users_file(self):
+        import clients_progress_ui as ui
+
+        temp_dir = Path(self.temp_dir.name)
+        users_path = temp_dir / "users.json"
+        legacy_path = temp_dir / "user_profile.json"
+        original_users_file = ui.USERS_FILE
+        original_legacy_file = ui.LEGACY_USER_PROFILE_FILE
+        ui.USERS_FILE = users_path
+        ui.LEGACY_USER_PROFILE_FILE = legacy_path
+
+        try:
+            profile = user_registeration("Alice", "alice@example.com")
+            self.assertEqual(profile["name"], "Alice")
+            self.assertTrue(users_path.exists())
+            self.assertFalse(legacy_path.exists())
+            payload = json.loads(users_path.read_text(encoding="utf-8"))
+            self.assertIn("users", payload)
+            self.assertEqual(payload["users"][0]["email"], "alice@example.com")
+        finally:
+            ui.USERS_FILE = original_users_file
+            ui.LEGACY_USER_PROFILE_FILE = original_legacy_file
+
+    def test_client_persistence_saves_permanent_project_files(self):
+        temp_dir = Path(self.temp_dir.name)
+        clients_path = temp_dir / "clients.json"
+        tasks_path = temp_dir / "clients_tasks.json"
+        reviews_path = temp_dir / "clients_reviews.json"
+
+        manager = ClientManager(str(clients_path))
+        manager.add_client("Nora", "5551234", "Consulting", "nora@example.com", shop_number="12")
+        manager.add_review("Nora", "Great service")
+        manager.save_clients()
+
+        self.assertTrue(clients_path.exists())
+        self.assertTrue(tasks_path.exists())
+        self.assertTrue(reviews_path.exists())
+
+        tasks_payload = json.loads(tasks_path.read_text(encoding="utf-8"))
+        reviews_payload = json.loads(reviews_path.read_text(encoding="utf-8"))
+        self.assertIsInstance(tasks_payload, list)
+        self.assertIsInstance(reviews_payload, list)
+        self.assertTrue(any(entry.get("client_name") == "Nora" for entry in tasks_payload))
+        self.assertTrue(any(entry.get("client_name") == "Nora" for entry in reviews_payload))
 
     def test_contact_numbers_default_to_oman_country_code(self):
         self.assertEqual(format_contact_number("5551234"), "+9685551234")
@@ -332,6 +378,12 @@ class ClientManagerTests(unittest.TestCase):
         self.assertEqual(T("Client Details"), "تفاصيل العميل")
         self.assertEqual(T("Client: {client_name}"), "العميل: {client_name}")
         set_language("eng")
+
+    def test_apply_bidi_handles_arabic_review_text(self):
+        label = "ملاحظات العميل"
+        expected = get_display(arabic_reshaper.reshape(label))
+        self.assertEqual(apply_bidi_text(label), expected)
+        self.assertIn("ملاحظات", apply_bidi_text(label))
 
     def test_language_switch_supports_english_and_arabic(self):
         self.assertEqual(T("Client Details"), "Client Details")

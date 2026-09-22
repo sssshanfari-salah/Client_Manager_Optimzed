@@ -48,6 +48,150 @@ if APP_ICON is None:
     APP_ICON = Path(__file__).resolve().parent.parent / "starco_icon.ico"
 
 CURRENT_LANGUAGE = "eng"
+APP_ROOT = Path(__file__).resolve().parent.parent
+USERS_FILE = APP_ROOT / "users.json"
+LEGACY_USER_PROFILE_FILE = APP_ROOT / "user_profile.json"
+
+COUNTRY_CODES_PATH = Path(__file__).resolve().parent / "country_codes.json"
+
+
+def _normalize_user_record(payload):
+    if not isinstance(payload, dict):
+        return {"name": "", "email": ""}
+    return {
+        "name": str(payload.get("name") or payload.get("user_name") or "").strip(),
+        "email": str(payload.get("email") or payload.get("email_account") or "").strip(),
+    }
+
+
+def _read_json_file(file_path):
+    if not file_path.exists():
+        return None
+    try:
+        return json.loads(file_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, TypeError):
+        return None
+
+
+def _write_json_file(file_path, payload):
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def load_registered_users():
+    payload = _read_json_file(USERS_FILE)
+
+    if isinstance(payload, dict):
+        users = payload.get("users") if isinstance(payload.get("users"), list) else payload.get("registered_users")
+        if isinstance(users, list):
+            return [_normalize_user_record(item) for item in users if isinstance(item, dict)]
+        single_user = _normalize_user_record(payload)
+        if single_user["name"] or single_user["email"]:
+            return [single_user]
+        return []
+
+    if isinstance(payload, list):
+        return [_normalize_user_record(item) for item in payload if isinstance(item, dict)]
+
+    return []
+
+
+def verify_registered_user(user_name, email_account):
+    name = str(user_name or "").strip()
+    email = str(email_account or "").strip().lower()
+    if not name or not email:
+        return False
+
+    for user in load_registered_users():
+        if user.get("name", "").strip().lower() == name.lower() and user.get("email", "").strip().lower() == email:
+            return True
+    return False
+
+
+def load_user_profile():
+    for file_path in (USERS_FILE, LEGACY_USER_PROFILE_FILE):
+        payload = _read_json_file(file_path)
+        if payload is None:
+            continue
+
+        if isinstance(payload, dict):
+            if isinstance(payload.get("users"), list):
+                for item in payload["users"]:
+                    if isinstance(item, dict):
+                        profile = _normalize_user_record(item)
+                        if profile["name"] or profile["email"]:
+                            return profile
+            profile = _normalize_user_record(payload)
+            if profile["name"] or profile["email"]:
+                return profile
+
+        if isinstance(payload, list):
+            for item in payload:
+                if isinstance(item, dict):
+                    profile = _normalize_user_record(item)
+                    if profile["name"] or profile["email"]:
+                        return profile
+
+    return {"name": "", "email": ""}
+
+
+def user_registeration(user_name, email_account):
+    profile = {
+        "name": str(user_name or "").strip(),
+        "email": str(email_account or "").strip(),
+    }
+    users = load_registered_users()
+
+    if profile["name"] or profile["email"]:
+        existing_index = next(
+            (index for index, item in enumerate(users) if item.get("name", "").strip().lower() == profile["name"].lower() and item.get("email", "").strip().lower() == profile["email"].lower()),
+            None,
+        )
+        if existing_index is not None:
+            users[existing_index] = profile
+        else:
+            users.append(profile)
+
+    _write_json_file(USERS_FILE, {"users": users})
+    return profile
+
+
+def user_registration(user_name, email_account):
+    return user_registeration(user_name, email_account)
+
+
+def save_user_profile(name, email):
+    return user_registeration(name, email)
+
+
+def is_registered_user_profile(profile=None):
+    if profile is None:
+        profile = load_user_profile()
+
+    user_name = str(profile.get("name") or "").strip()
+    user_email = str(profile.get("email") or "").strip()
+    if not user_name or not user_email:
+        return False
+    return verify_registered_user(user_name, user_email)
+
+
+def build_report_issuer_footer():
+    profile = load_user_profile()
+    if not is_registered_user_profile(profile):
+        user_name = "Guest"
+    else:
+        user_name = profile.get("name") or "System"
+    return T("Report issued by: {user_name}", user_name=user_name)
+
+
+def append_report_footer(lines):
+    footer = build_report_issuer_footer()
+    content = [str(item) for item in lines]
+    if not content:
+        return [footer]
+    if content[-1].strip() == footer:
+        return content
+    return content + ["", footer]
 
 COUNTRY_CODES_PATH = Path(__file__).resolve().parent / "country_codes.json"
 
@@ -93,28 +237,14 @@ def apply_bidi_text(value):
     text = str(value or "")
     if not text:
         return ""
-
     if not is_arabic_text(text):
+        return text
+    if re.search(r"[A-Za-z]", text):
         return text
 
     normalized = text.strip()
     if not normalized:
         return text
-
-    if any(ch in text for ch in "{}()[]<>/\\|=+*#@%$£€¥0123456789"):
-        return text
-
-    allowed = set(" \t\n\r" + "0123456789")
-    for ch in text:
-        if not (
-            0x0600 <= ord(ch) <= 0x06FF
-            or 0x0750 <= ord(ch) <= 0x077F
-            or 0x08A0 <= ord(ch) <= 0x08FF
-            or 0xFB50 <= ord(ch) <= 0xFDFF
-            or 0xFE70 <= ord(ch) <= 0xFEFF
-            or ch in allowed
-        ):
-            return text
 
     return get_display(arabic_reshaper.reshape(text))
 
@@ -703,7 +833,7 @@ def get_registered_printers():
 
 
 def print_report_document(title, lines):
-    report_lines = [str(item) for item in lines]
+    report_lines = append_report_footer(lines)
     safe_title = "".join(ch if ch.isalnum() or ch in " _-" else "_" for ch in str(title)).strip() or "report"
     printers = get_registered_printers()
 
@@ -716,7 +846,7 @@ def print_report_document(title, lines):
             temp_file.write(str(title) + "\n")
             temp_file.write("=" * max(20, len(str(title))) + "\n\n")
             for line in report_lines:
-                temp_file.write(line + "\n")
+                temp_file.write(str(line) + "\n")
             temp_path = temp_file.name
 
         if hasattr(os, "startfile"):
@@ -949,9 +1079,14 @@ class WelcomeWindow(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Starco Commercial Complex")
-        self.geometry("760x420")
-        self.minsize(620, 320)
+        self.geometry("760x520")
+        self.minsize(620, 420)
         self.configure(bg="#eef2ff")
+
+        self.user_name_var = tk.StringVar(value=load_user_profile().get("name", ""))
+        self.user_email_var = tk.StringVar(value=load_user_profile().get("email", ""))
+        self.login_status_var = tk.StringVar(value="")
+        self.guest_mode = not is_registered_user_profile({"name": self.user_name_var.get(), "email": self.user_email_var.get()})
 
         header = ttk.Frame(self, padding=(28, 22, 28, 12))
         header.pack(fill="x")
@@ -981,6 +1116,20 @@ class WelcomeWindow(tk.Tk):
         )
         title.pack(anchor="center", pady=(8, 0))
 
+        self.login_status_label = tk.Label(
+            header,
+            textvariable=self.login_status_var,
+            font=("Segoe UI", 10, "bold"),
+            fg="#ecfeff",
+            bg="#0f766e",
+            padx=12,
+            pady=6,
+            relief="flat",
+            bd=0,
+            justify="center",
+        )
+        self.login_status_label.pack(anchor="center", pady=(0, 4))
+
         subtitle = ttk.Label(
             header,
             text=T("Welcome to Starco Commercial Complex Arabic"),
@@ -988,6 +1137,23 @@ class WelcomeWindow(tk.Tk):
             foreground="#374151",
         )
         subtitle.pack(anchor="center", pady=(0, 4))
+
+        self._refresh_login_status()
+
+        profile_frame = ttk.LabelFrame(self, text=T("User Profile"), padding=(16, 10))
+        profile_frame.pack(fill="x", padx=24, pady=(0, 10))
+        profile_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(profile_frame, text=T("User Name")).grid(row=0, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+        ttk.Entry(profile_frame, textvariable=self.user_name_var, width=32).grid(row=0, column=1, sticky="ew", pady=(0, 6))
+
+        ttk.Label(profile_frame, text=T("User Email")).grid(row=1, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+        ttk.Entry(profile_frame, textvariable=self.user_email_var, width=32).grid(row=1, column=1, sticky="ew", pady=(0, 6))
+
+        actions = ttk.Frame(profile_frame)
+        actions.grid(row=2, column=1, sticky="e", pady=(4, 0))
+        ttk.Button(actions, text=T("Register"), command=self.open_registration_window).pack(side="left", padx=(0, 8))
+        ttk.Button(actions, text=T("Save User"), command=self.save_user_profile).pack(side="left")
 
         main_frame = ttk.Frame(self, padding=(24, 8, 24, 18))
         main_frame.pack(fill="both", expand=True)
@@ -1050,6 +1216,113 @@ class WelcomeWindow(tk.Tk):
         exit_button = ttk.Button(footer, text=T("Exit"), command=self.destroy, style="Action.TButton", width=14)
         exit_button.pack(anchor="center")
 
+    def open_registration_window(self):
+        registration = UserRegistrationWindow(self)
+        registration.grab_set()
+        registration.wait_window()
+        current = load_user_profile()
+        if current.get("name"):
+            self.user_name_var.set(current["name"])
+        if current.get("email"):
+            self.user_email_var.set(current["email"])
+        self._refresh_login_status()
+
+    def _refresh_login_status(self):
+        profile = {
+            "name": self.user_name_var.get().strip(),
+            "email": self.user_email_var.get().strip(),
+        }
+        if is_registered_user_profile(profile):
+            self.guest_mode = False
+            self.login_status_var.set(T("Logged in as {user_name}", user_name=profile["name"]))
+            return
+
+        if profile["name"] or profile["email"]:
+            self.guest_mode = True
+            self.login_status_var.set(T("Logged in as {user_name}", user_name=profile["name"] or "Guest"))
+            return
+
+        self.guest_mode = True
+        self.login_status_var.set("")
+
+    def save_user_profile(self):
+        user_name = self.user_name_var.get().strip()
+        user_email = self.user_email_var.get().strip()
+        if not user_name:
+            messagebox.showwarning(T("User Name"), T("Please enter your user name."))
+            return
+
+        if not user_email:
+            messagebox.showwarning(T("User Email"), T("Please enter your email address."))
+            return
+
+        if not verify_registered_user(user_name, user_email):
+            self.guest_mode = True
+            self.user_name_var.set(user_name)
+            self.user_email_var.set(user_email)
+            self._refresh_login_status()
+            messagebox.showinfo(
+                T("User Login"),
+                T("User not found. Access granted as guest. Transactions, contract details, and email sending stay restricted."),
+            )
+            return
+
+        self.guest_mode = False
+        save_user_profile(user_name, user_email)
+        self.user_name_var.set(user_name)
+        self.user_email_var.set(user_email)
+        self._refresh_login_status()
+        messagebox.showinfo(T("User Profile"), T("User profile confirmed successfully."))
+
+
+class UserRegistrationWindow(tk.Toplevel):
+    def __init__(self, master=None):
+        super().__init__(master)
+        self.title(T("User Registration"))
+        self.geometry("420x220")
+        self.minsize(340, 180)
+        self.transient(master)
+
+        self.user_name_var = tk.StringVar(value="")
+        self.user_email_var = tk.StringVar(value="")
+
+        main = ttk.Frame(self, padding=16)
+        main.pack(fill="both", expand=True)
+        main.columnconfigure(1, weight=1)
+
+        ttk.Label(main, text=T("User Name")).grid(row=0, column=0, sticky="w", padx=(0, 8), pady=(0, 8))
+        ttk.Entry(main, textvariable=self.user_name_var, width=32).grid(row=0, column=1, sticky="ew", pady=(0, 8))
+
+        ttk.Label(main, text=T("User Email")).grid(row=1, column=0, sticky="w", padx=(0, 8), pady=(0, 8))
+        ttk.Entry(main, textvariable=self.user_email_var, width=32).grid(row=1, column=1, sticky="ew", pady=(0, 8))
+
+        actions = ttk.Frame(main)
+        actions.grid(row=2, column=0, columnspan=2, sticky="e", pady=(12, 0))
+        ttk.Button(actions, text=T("Save User"), command=self.register_user).pack(side="left", padx=(0, 8))
+        ttk.Button(actions, text=T("Cancel"), command=self.destroy).pack(side="left")
+
+    def register_user(self):
+        user_name = self.user_name_var.get().strip()
+        user_email = self.user_email_var.get().strip()
+        if not user_name:
+            messagebox.showwarning(T("User Name"), T("Please enter your user name."))
+            return
+
+        if not user_email:
+            messagebox.showwarning(T("User Email"), T("Please enter your email address."))
+            return
+
+        profile = user_registeration(user_name, user_email)
+        if self.master is not None and hasattr(self.master, "user_name_var"):
+            self.master.user_name_var.set(profile.get("name", ""))
+        if self.master is not None and hasattr(self.master, "user_email_var"):
+            self.master.user_email_var.set(profile.get("email", ""))
+        if self.master is not None and hasattr(self.master, "_refresh_login_status"):
+            self.master._refresh_login_status()
+
+        messagebox.showinfo(T("User Registration"), T("User registered successfully."))
+        self.destroy()
+
     def generate_project_manager_todo_tasks(self):
         manager = ClientManager("clients.json")
         manager.load_clients()
@@ -1090,6 +1363,9 @@ class WelcomeWindow(tk.Tk):
         app.focus_section("overview")
 
     def _open_transactions_panel(self):
+        if not is_registered_user_profile():
+            messagebox.showwarning(T("Access Denied"), T("Registered users only. Guest access is limited to clients, reviews and tasks."))
+            return
         self.destroy()
         app = open_overview_window()
         try:
@@ -2516,8 +2792,8 @@ class ExportClientsLogWindow(tk.Toplevel):
 
         destination = Path(target_path)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        report = self.build_report_text()
-        destination.write_text(report, encoding="utf-8")
+        report = append_report_footer(self.build_report_text().splitlines())
+        destination.write_text("\n".join(report) + "\n", encoding="utf-8")
         messagebox.showinfo(T("Save Log"), f"Saved: {destination}")
         self.destroy()
 
@@ -2594,7 +2870,8 @@ class ExportTaskLogWindow(tk.Toplevel):
 
         destination = Path(target_path)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(self.build_report_text(), encoding="utf-8")
+        report = append_report_footer(self.build_report_text().splitlines())
+        destination.write_text("\n".join(report) + "\n", encoding="utf-8")
         messagebox.showinfo(T("Save Log"), f"Saved: {destination}")
         self.destroy()
 
@@ -2665,7 +2942,8 @@ class ExportReviewLogWindow(tk.Toplevel):
 
         destination = Path(target_path)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(self.build_report_text(), encoding="utf-8")
+        report = append_report_footer(self.build_report_text().splitlines())
+        destination.write_text("\n".join(report) + "\n", encoding="utf-8")
         messagebox.showinfo(T("Save Log"), f"Saved: {destination}")
         self.destroy()
 
@@ -3057,8 +3335,7 @@ class ProgressApp(tk.Tk):
         self.electrical_meter_entry = ttk.Entry(details_frame, textvariable=self.electrical_meter_var)
         self.electrical_meter_entry.grid(row=7, column=1, sticky="ew", padx=(0, 10), pady=(0, 8))
 
-        self.review_frame = ttk.LabelFrame(main, text=f"📝 {T('Client Review')}", style="Section.TLabelframe")
-        set_emoji_translated_label(self.review_frame, "Client Review", "📝 ")
+        self.review_frame = ttk.LabelFrame(main, text=T("Client Review"), style="Section.TLabelframe")
         self.translatable_labels.append((self.review_frame, "Client Review"))
         self.review_frame.grid(row=1, column=2, columnspan=2, sticky="nsew", padx=(6, 0), pady=(0, 8))
         self.review_frame.columnconfigure(0, weight=1)
@@ -3482,9 +3759,15 @@ class ProgressApp(tk.Tk):
         )
 
     def open_contract_details_window(self):
+        if not is_registered_user_profile():
+            messagebox.showwarning(T("Access Denied"), T("Registered users only. Guest access is limited to clients, reviews, tasks and payment reports."))
+            return
         ContractDetailsWindow(self)
 
     def open_transactions_window(self):
+        if not is_registered_user_profile():
+            messagebox.showwarning(T("Access Denied"), T("Registered users only. Guest access is limited to clients, reviews, tasks and payment reports."))
+            return
         ClientTransactionsWindow(self, self.client_name_var.get().strip())
 
     def open_payment_report_window(self):
@@ -3772,16 +4055,31 @@ class ProgressApp(tk.Tk):
         messagebox.showinfo(T("Client saved"), T("'{name}' was saved successfully.", name=name))
 
     def send_email_to_client(self):
+        if not is_registered_user_profile():
+            messagebox.showwarning(T("Access Denied"), T("Registered users only. Guest access is limited to clients, reviews, tasks and payment reports."))
+            return
+
         email = self.email_var.get().strip()
         if not email:
             messagebox.showwarning(T("No email"), T("This client does not have an email saved yet."))
             return
 
-        gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={quote(email)}"
+        user_profile = load_user_profile()
+        user_email = user_profile.get("email", "")
+        user_name = user_profile.get("name") or "User"
+        gmail_params = [
+            f"to={quote(email)}",
+        ]
+        if user_email:
+            gmail_params.append(f"cc={quote(user_email)}")
+        gmail_params.append(f"su={quote(f'Client communication - {user_name}')}")
+        gmail_url = "https://mail.google.com/mail/?view=cm&fs=1&" + "&".join(gmail_params)
         if webbrowser.open(gmail_url):
             return
 
         mailto_url = f"mailto:{quote(email)}"
+        if user_email:
+            mailto_url = f"mailto:{quote(email)}?cc={quote(user_email)}"
         webbrowser.open(mailto_url)
 
     def confirm_exit_app(self):
@@ -3816,6 +4114,11 @@ class ProgressApp(tk.Tk):
         self.wait_window(dialog)
 
     def save_and_exit(self):
+        name = self.client_name_var.get().strip()
+        if not name or name == T("<New Client>"):
+            self.destroy()
+            return
+
         self.save_current_client()
         self.client_manager.load_clients()
         self.client_manager.save_clients()

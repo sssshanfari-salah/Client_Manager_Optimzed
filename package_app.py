@@ -20,6 +20,31 @@ APP_DISPLAY_NAME = "Clients Manager"
 DEFAULT_COUNTRY_CODE = "+968"
 SPEC_FILE = APP_DIR / f"{APP_NAME}.spec"
 
+APP_MODULE_FILES = [
+    SOURCE_DIR / "main.py",
+    SOURCE_DIR / "clients_management.py",
+    SOURCE_DIR / "clients_progress_ui.py",
+    SOURCE_DIR / "business_logic.py",
+    SOURCE_DIR / "reporting.py",
+    SOURCE_DIR / "data_access.py",
+    SOURCE_DIR / "translations.py",
+    SOURCE_DIR / "ui_shared.py",
+    SOURCE_DIR / "ui_main_app.py",
+    SOURCE_DIR / "ui_windows.py",
+    SOURCE_DIR / "ui_client_windows.py",
+    SOURCE_DIR / "ui_task_windows.py",
+    SOURCE_DIR / "ui_report_windows.py",
+    SOURCE_DIR / "ui_client_actions.py",
+    SOURCE_DIR / "ui_data_binding.py",
+    SOURCE_DIR / "ui_task_actions.py",
+    SOURCE_DIR / "ui_report_actions.py",
+    SOURCE_DIR / "ui_actions" / "__init__.py",
+    SOURCE_DIR / "ui_actions" / "client_actions.py",
+    SOURCE_DIR / "ui_actions" / "task_actions.py",
+    SOURCE_DIR / "ui_actions" / "report_actions.py",
+    SOURCE_DIR / "ui_actions" / "state_binding.py",
+]
+
 
 # Find the best available icon file for the built Windows desktop app.
 def resolve_target_icon():
@@ -39,6 +64,9 @@ TARGET_ICON = resolve_target_icon()
 COUNTRY_CODES_DATA = SOURCE_DIR / "country_codes.json"
 SHOPS_ELECTRICAL_METERS_FILE = SOURCE_DIR / "Shops_Elect_meters.json"
 CLIENTS_DATA_FILE = APP_DIR / "clients.json"
+USERS_DATA_FILE = APP_DIR / "users.json"
+CLIENTS_TASKS_DATA_FILE = APP_DIR / "clients_tasks.json"
+CLIENTS_REVIEWS_DATA_FILE = APP_DIR / "clients_reviews.json"
 LEGACY_CLIENTS_DATA_FILE = SOURCE_DIR / "clients.json"
 DOCUMENTS_DATA_FILE = SOURCE_DIR / "docs" / "documents.txt"
 SUPPORTING_DOCUMENTS_DIR = APP_DIR / "supporting_documents"
@@ -63,6 +91,9 @@ LEGACY_DISPLAY_NAMES = ["Marketing Booster", "Marketing Booster AR", "Clients Ma
 RUNTIME_DATA_FILES = [
     TARGET_ICON,
     CLIENTS_DATA_FILE,
+    USERS_DATA_FILE,
+    CLIENTS_TASKS_DATA_FILE,
+    CLIENTS_REVIEWS_DATA_FILE,
     COUNTRY_CODES_DATA,
     SHOPS_ELECTRICAL_METERS_FILE,
     DOCUMENTS_DATA_FILE,
@@ -78,14 +109,12 @@ RUNTIME_DATA_FILES = [path for path in RUNTIME_DATA_FILES if path is not None an
 def validate_runtime_asset_catalog():
     required_paths = [
         ENTRY_SCRIPT,
-        SOURCE_DIR / "main.py",
-        SOURCE_DIR / "clients_management.py",
-        SOURCE_DIR / "clients_progress_ui.py",
-        SOURCE_DIR / "ui_windows.py",
-        SOURCE_DIR / "ui_main_app.py",
-        SOURCE_DIR / "ui_shared.py",
+        *APP_MODULE_FILES,
         SOURCE_DIR / "ui_actions",
         CLIENTS_DATA_FILE,
+        USERS_DATA_FILE,
+        CLIENTS_TASKS_DATA_FILE,
+        CLIENTS_REVIEWS_DATA_FILE,
         LEGACY_CLIENTS_DATA_FILE,
         COUNTRY_CODES_DATA,
         SHOPS_ELECTRICAL_METERS_FILE,
@@ -128,6 +157,8 @@ def validate_runtime_asset_catalog():
         "class ContractDetailsWindow",
         "class ClientPaymentReportWindow",
         "def T",
+        "from ui_actions.state_binding import StateBinding",
+        "from translations import T, CURRENT_LANGUAGE",
     ]
     legacy_ui_markers = [
         "from ui_windows import *",
@@ -663,6 +694,13 @@ def ensure_runtime_files():
 
     if not CLIENTS_DATA_FILE.exists():
         CLIENTS_DATA_FILE.write_text("[]", encoding="utf-8")
+
+    if not USERS_DATA_FILE.exists():
+        USERS_DATA_FILE.write_text(json.dumps({"users": []}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    for project_data_file in (CLIENTS_TASKS_DATA_FILE, CLIENTS_REVIEWS_DATA_FILE):
+        if not project_data_file.exists():
+            project_data_file.write_text("[]", encoding="utf-8")
 
     CLIENTS_ROOT_DIR.mkdir(parents=True, exist_ok=True)
 

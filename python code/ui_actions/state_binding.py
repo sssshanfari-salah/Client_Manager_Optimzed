@@ -2,11 +2,34 @@
 
 import tkinter as tk
 
-from translations import T
+from translations import CURRENT_LANGUAGE, T, apply_bidi_text
 
 
 class StateBinding:
     """Mix-in responsible for binding widgets to model state."""
+
+    @staticmethod
+    def _set_widget_text(widget, text):
+        rendered = apply_bidi_text(T(text)) if CURRENT_LANGUAGE == "ar" else T(text)
+
+        try:
+            if isinstance(widget, tk.Text):
+                widget.delete("1.0", tk.END)
+                widget.insert("1.0", rendered)
+                widget.configure(justify="right" if CURRENT_LANGUAGE == "ar" else "left")
+                return
+
+            widget.configure(text=rendered)
+            try:
+                widget.configure(anchor="e" if CURRENT_LANGUAGE == "ar" else "w")
+            except Exception:
+                pass
+            try:
+                widget.configure(justify="right" if CURRENT_LANGUAGE == "ar" else "left")
+            except Exception:
+                pass
+        except Exception:
+            pass
 
     def refresh_client_combo(self):
         self.client_manager.load_clients()
@@ -60,7 +83,13 @@ class StateBinding:
     def refresh_lang_ui(self):
         for widget, original_text in getattr(self, "translatable_labels", []):
             try:
-                widget.configure(text=T(original_text))
+                self._set_widget_text(widget, original_text)
+            except Exception:
+                pass
+
+        if hasattr(self, "review_text"):
+            try:
+                self.review_text.configure(justify="right" if CURRENT_LANGUAGE == "ar" else "left")
             except Exception:
                 pass
 

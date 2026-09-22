@@ -112,8 +112,11 @@ class ProgressApp(StateBinding, TaskActions, ClientActions, ReportActions, tk.Tk
         review_frame = ttk.LabelFrame(main, text=T("Client Review"), padding=(10, 8))
         review_frame.grid(row=1, column=2, columnspan=2, sticky="nsew", padx=(6, 0), pady=(0, 8))
         review_frame.columnconfigure(0, weight=1)
+        self.translatable_labels.append((review_frame, "Client Review"))
         self.review_text = tk.Text(review_frame, height=8, wrap="word")
         self.review_text.grid(row=0, column=0, sticky="nsew")
+        self.review_text.configure(justify="left")
+        self.translatable_labels.append((self.review_text, "Client Review"))
 
         action_row = ttk.Frame(review_frame)
         action_row.grid(row=1, column=0, sticky="e", pady=(8, 0))

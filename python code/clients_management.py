@@ -572,10 +572,110 @@ class ClientManager:
         folder_path.mkdir(parents=True, exist_ok=True)
         return folder_path
 
+    def _project_data_path(self, filename: str):
+        return self.file_path.with_name(filename)
+
+    def _write_json_file(self, path: Path, payload):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def _collect_task_history(self):
+        history = []
+        for client in self.clients:
+            progress = normalize_client_progress(getattr(client, "progress", {}) or {})
+            all_tasks = list(progress.get("all_tasks", []) or [])
+            pending_tasks = list(progress.get("pending_tasks", all_tasks) or [])
+            if not all_tasks and not pending_tasks:
+                continue
+            history.append({
+                "client_name": client.name,
+                "progress": int(progress.get("progress", 0) or 0),
+                "pending_tasks": pending_tasks,
+                "all_tasks": all_tasks,
+            })
+        return history
+
+    def _collect_review_history(self):
+        history = []
+        for client in self.clients:
+            for review in getattr(client, "reviews", []) or []:
+                if not isinstance(review, dict):
+                    continue
+                history.append({
+                    "client_name": client.name,
+                    "contact": client.contact,
+                    "business": client.business,
+                    "email": client.email,
+                    "date": review.get("date", ""),
+                    "review": review.get("review", ""),
+                    "comment": review.get("comment", ""),
+                })
+        return history
+
+    def _restore_supporting_history(self):
+        task_path = self._project_data_path("clients_tasks.json")
+        if task_path.exists():
+            try:
+                payload = json.loads(task_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError, TypeError, ValueError):
+                payload = []
+            if isinstance(payload, list):
+                by_name = {client.name.lower(): client for client in self.clients}
+                for item in payload:
+                    if not isinstance(item, dict):
+                        continue
+                    client_name = str(item.get("client_name") or item.get("name") or "").strip()
+                    if not client_name:
+                        continue
+                    client = by_name.get(client_name.lower())
+                    if client is None:
+                        continue
+                    client.progress = normalize_client_progress({
+                        "client_name": client_name,
+                        "progress": item.get("progress", 0),
+                        "pending_tasks": item.get("pending_tasks", []),
+                        "all_tasks": item.get("all_tasks", []),
+                    })
+
+        review_path = self._project_data_path("clients_reviews.json")
+        if review_path.exists():
+            try:
+                payload = json.loads(review_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError, TypeError, ValueError):
+                payload = []
+            if isinstance(payload, list):
+                by_name = {client.name.lower(): client for client in self.clients}
+                for item in payload:
+                    if not isinstance(item, dict):
+                        continue
+                    client_name = str(item.get("client_name") or item.get("name") or "").strip()
+                    if not client_name:
+                        continue
+                    client = by_name.get(client_name.lower())
+                    if client is None:
+                        continue
+                    review_text = str(item.get("review") or "").strip()
+                    if not review_text:
+                        continue
+                    duplicate = any(
+                        existing.get("review", "").strip() == review_text and str(existing.get("date", "")).strip() == str(item.get("date", "")).strip()
+                        for existing in client.reviews
+                    )
+                    if duplicate:
+                        continue
+                    client.reviews.append({
+                        "date": item.get("date", ""),
+                        "review": review_text,
+                        "comment": item.get("comment", ""),
+                    })
+
     def save_clients(self):
         self.file_path.parent.mkdir(parents=True, exist_ok=True)
         payload = [client.to_dict() for client in self.clients]
-        self.file_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        self.file_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        self._write_json_file(self._project_data_path("clients_tasks.json"), self._collect_task_history())
+        self._write_json_file(self._project_data_path("clients_reviews.json"), self._collect_review_history())
 
     def load_clients(self):
         if not self.file_path.exists():
@@ -587,6 +687,8 @@ class ClientManager:
             self.clients = [Client.from_dict(item) for item in data]
         except (json.JSONDecodeError, TypeError, ValueError):
             self.clients = []
+
+        self._restore_supporting_history()
 
     def json2txt(self):
         with self.file_path.open("r", encoding="utf-8") as infile:

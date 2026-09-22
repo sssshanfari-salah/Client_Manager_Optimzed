@@ -44,6 +44,19 @@ TRANSLATIONS = {
         "Language": "Language",
         "English": "English",
         "العربية": "العربية",
+        "User Profile": "User Profile",
+        "User Name": "User Name",
+        "User Email": "User Email",
+        "Save User": "Save User",
+        "User Login": "User Login",
+        "User Registration": "User Registration",
+        "Logged in as {user_name}": "Logged in as {user_name}",
+        "Please enter your user name.": "Please enter your user name.",
+        "User profile saved successfully.": "User profile saved successfully.",
+        "User profile confirmed successfully.": "User profile confirmed successfully.",
+        "User registered successfully.": "User registered successfully.",
+        "User not found. Access granted as guest. Transactions, contract details, and email sending stay restricted.": "User not found. Access granted as guest. Transactions, contract details, and email sending stay restricted.",
+        "Report issued by: {user_name}": "Report issued by: {user_name}",
         "Project Manager To-Do": "Project Manager To-Do",
         "Open client payment records": "Open client payment records",
         "No reviews yet": "No reviews yet",
@@ -82,6 +95,19 @@ TRANSLATIONS = {
         "Language": "اللغة",
         "English": "English",
         "العربية": "العربية",
+        "User Profile": "ملف المستخدم",
+        "User Name": "اسم المستخدم",
+        "User Email": "بريد المستخدم",
+        "Save User": "حفظ المستخدم",
+        "User Login": "تسجيل الدخول",
+        "User Registration": "تسجيل المستخدم",
+        "Logged in as {user_name}": "تم تسجيل الدخول كـ {user_name}",
+        "Please enter your user name.": "يرجى إدخال اسم المستخدم.",
+        "User profile saved successfully.": "تم حفظ ملف المستخدم بنجاح.",
+        "User profile confirmed successfully.": "تم تأكيد ملف المستخدم بنجاح.",
+        "User registered successfully.": "تم تسجيل المستخدم بنجاح.",
+        "User not found. Access granted as guest. Transactions, contract details, and email sending stay restricted.": "لم يتم العثور على المستخدم. تم منح الوصول كضيف. المعاملات وتفاصيل العقد وإرسال البريد الإلكتروني تبقى مقيدة.",
+        "Report issued by: {user_name}": "تم إصدار التقرير من قبل: {user_name}",
         "Project Manager To-Do": "مدير المشاريع - المهام",
         "Open client payment records": "فتح سجلات الدفع للعميل",
         "No reviews yet": "لا توجد مراجعات بعد",
@@ -107,22 +133,13 @@ def apply_bidi_text(value):
         return ""
     if not is_arabic_text(text):
         return text
+    if re.search(r"[A-Za-z]", text):
+        return text
+
     normalized = text.strip()
     if not normalized:
         return text
-    if any(ch in text for ch in "{}()[]<>/\\|=+*#@%$£€¥0123456789"):
-        return text
-    allowed = set(" \t\n\r" + "0123456789")
-    for ch in text:
-        if not (
-            0x0600 <= ord(ch) <= 0x06FF
-            or 0x0750 <= ord(ch) <= 0x077F
-            or 0x08A0 <= ord(ch) <= 0x08FF
-            or 0xFB50 <= ord(ch) <= 0xFDFF
-            or 0xFE70 <= ord(ch) <= 0xFEFF
-            or ch in allowed
-        ):
-            return text
+
     return get_display(arabic_reshaper.reshape(text))
 
 
