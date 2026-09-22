@@ -1153,6 +1153,7 @@ class WelcomeWindow(tk.Tk):
         actions = ttk.Frame(profile_frame)
         actions.grid(row=2, column=1, sticky="e", pady=(4, 0))
         ttk.Button(actions, text=T("Register"), command=self.open_registration_window).pack(side="left", padx=(0, 8))
+        ttk.Button(actions, text=T("Login"), command=self.login_user).pack(side="left", padx=(0, 8))
         ttk.Button(actions, text=T("Save User"), command=self.save_user_profile).pack(side="left")
 
         main_frame = ttk.Frame(self, padding=(24, 8, 24, 18))
@@ -1245,6 +1246,40 @@ class WelcomeWindow(tk.Tk):
         self.guest_mode = True
         self.login_status_var.set("")
 
+    def login_user(self):
+        user_name = self.user_name_var.get().strip()
+        user_email = self.user_email_var.get().strip()
+
+        if not user_name:
+            messagebox.showwarning(T("User Name"), T("Please enter your user name."))
+            return
+
+        if not user_email:
+            messagebox.showwarning(T("User Email"), T("Please enter your email address."))
+            return
+
+        if not verify_registered_user(user_name, user_email):
+            self.guest_mode = True
+            self.user_name_var.set(user_name)
+            self.user_email_var.set(user_email)
+            self._refresh_login_status()
+            messagebox.showwarning(
+                T("Login failed"),
+                T("User not found in the saved user list. Please register first or continue as guest."),
+            )
+            return
+
+        self.guest_mode = False
+        save_user_profile(user_name, user_email)
+        self.user_name_var.set(user_name)
+        self.user_email_var.set(user_email)
+        self._refresh_login_status()
+        messagebox.showinfo(T("Login"), T("Login successful. Access granted to the app."))
+        self.destroy()
+        welcome = WelcomeWindow()
+        welcome.protocol("WM_DELETE_WINDOW", welcome.destroy)
+        welcome.mainloop()
+
     def save_user_profile(self):
         user_name = self.user_name_var.get().strip()
         user_email = self.user_email_var.get().strip()
@@ -1299,7 +1334,15 @@ class UserRegistrationWindow(tk.Toplevel):
         actions = ttk.Frame(main)
         actions.grid(row=2, column=0, columnspan=2, sticky="e", pady=(12, 0))
         ttk.Button(actions, text=T("Save User"), command=self.register_user).pack(side="left", padx=(0, 8))
-        ttk.Button(actions, text=T("Cancel"), command=self.destroy).pack(side="left")
+        ttk.Button(actions, text=T("Cansel"), command=self.close_to_login).pack(side="left")
+
+    def close_to_login(self):
+        self.destroy()
+        if self.master is not None and hasattr(self.master, "focus_set"):
+            try:
+                self.master.focus_set()
+            except Exception:
+                pass
 
     def register_user(self):
         user_name = self.user_name_var.get().strip()
@@ -1320,8 +1363,13 @@ class UserRegistrationWindow(tk.Toplevel):
         if self.master is not None and hasattr(self.master, "_refresh_login_status"):
             self.master._refresh_login_status()
 
-        messagebox.showinfo(T("User Registration"), T("User registered successfully."))
+        messagebox.showinfo(T("User Registration"), T("User registered successfully. Please log in with your saved credentials."))
         self.destroy()
+        if self.master is not None and hasattr(self.master, "focus_set"):
+            try:
+                self.master.focus_set()
+            except Exception:
+                pass
 
     def generate_project_manager_todo_tasks(self):
         manager = ClientManager("clients.json")
