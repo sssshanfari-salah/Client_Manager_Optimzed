@@ -5,9 +5,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import List
 
+# Core client data model, validation, and persistence logic.
+# This file handles client records, contact formatting, task/progress metadata, and JSON storage.
 DEFAULT_CONTACT_COUNTRY_CODE = "+968"
 
 
+# Normalise contract details so every record has the same expected keys and safe defaults.
 def normalize_contract_details(value):
     contract_fields = {
         "contract_number": "",
@@ -32,6 +35,7 @@ def normalize_contract_details(value):
     return normalized
 
 
+# Normalise payment/transaction blocks before they are stored or displayed in the UI.
 def normalize_transaction_entry(value):
     transaction_fields = {
         "month": "",
@@ -56,6 +60,7 @@ def normalize_transaction_entry(value):
     return normalized
 
 
+# Generate the list of contract months between start and end dates for reporting and follow-up tasks.
 def generate_contract_months(start_date=None, end_date=None):
     start_value = str(start_date or "").strip()
     end_value = str(end_date or "").strip()
@@ -107,6 +112,7 @@ def generate_contract_months(start_date=None, end_date=None):
     return unique_months
 
 
+# Standardise the progress payload used by plans and per-client task tracking.
 def normalize_client_progress(value):
     default_progress = {
         "client_name": "",
@@ -137,6 +143,7 @@ def normalize_client_progress(value):
     return normalized
 
 
+# Locate the canonical clients JSON file and backfill data from old project locations when needed.
 def resolve_clients_data_path(project_root=None):
     if project_root is None:
         project_root = Path(__file__).resolve().parent.parent
@@ -228,6 +235,7 @@ def resolve_clients_data_path(project_root=None):
     return canonical_file
 
 
+# Format phone numbers consistently so they include the default Oman country code where appropriate.
 def format_contact_number(value: str, country_code: str = DEFAULT_CONTACT_COUNTRY_CODE) -> str:
     if value is None:
         return ""
@@ -253,6 +261,7 @@ def format_contact_number(value: str, country_code: str = DEFAULT_CONTACT_COUNTR
     return f"{normalized_country}{digits_only}"
 
 
+# Single client record used throughout the app for identity, contact, review, and contract data.
 class Client:
     def __init__(self, name: str, contact: str, business: str, email: str = "", shop_number: str = "", reviews=None, contract_details=None, progress=None, transactions=None, address: str = "", electrical_meter: str = "", notes: str = ""):
         self.name = name
@@ -383,6 +392,7 @@ class Client:
         return f"Client name: {self.name}\nContact: {self.contact}\nType of business: {self.business}\nEmail: {self.email}\nReviews: {len(self.reviews)}"
 
 
+# Manage the collection of clients and coordinate saving/loading from the JSON file.
 class ClientManager:
     def __init__(self, file_path=None):
         if file_path is None:

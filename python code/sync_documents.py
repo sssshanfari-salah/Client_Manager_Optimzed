@@ -1,15 +1,19 @@
+# Utility script that keeps a project document copy synchronized between source and target locations.
+# This is mainly used to mirror content when the app or packaging workflow expects a stable docs file.
 from __future__ import annotations
 
 import hashlib
 import time
 from pathlib import Path
 
+# Resolve the project root and the document path used by the app.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DOCS_DIR = PROJECT_ROOT / "python code" / "docs"
 SOURCE = DOCS_DIR / "documents.txt"
 TARGET = DOCS_DIR / "documents.txt"
 
 
+# Copy the current document data once if the source and target differ.
 def sync_once() -> bool:
     if not SOURCE.exists():
         print(f"Source file not found: {SOURCE}")
@@ -25,6 +29,7 @@ def sync_once() -> bool:
     return True
 
 
+# Watch the source file for changes and sync it repeatedly.
 def main() -> None:
     print(f"Watching for changes...\nSource: {SOURCE}\nTarget: {TARGET}")
     last_hash = None
@@ -39,6 +44,7 @@ def main() -> None:
         time.sleep(2)
 
 
+# Run a final sync immediately when the script starts, then begin monitoring.
 if __name__ == "__main__":
     sync_once()
     main()

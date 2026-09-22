@@ -191,6 +191,7 @@ def load_country_codes():
     return fallback
 
 
+# Central UI constants and helper data used by the forms, translations, and client records.
 COUNTRY_CODES = load_country_codes()
 COUNTRY_OPTIONS = [item["country"] for item in COUNTRY_CODES]
 COUNTRY_CODE_BY_NAME = {item["country"]: item["code"] for item in COUNTRY_CODES}
@@ -198,6 +199,7 @@ DEFAULT_COUNTRY = "Oman"
 DEFAULT_COUNTRY_CODE = "+968"
 
 
+# Convert a raw country code into a consistent international format like +968.
 def normalize_country_code(code):
     if code is None:
         return DEFAULT_COUNTRY_CODE
@@ -252,6 +254,7 @@ def parse_contact_for_ui(contact_value):
     return digits, DEFAULT_COUNTRY
 
 
+# Pop-up calendar used when the user picks a date in contract or payment forms.
 class DatePickerPopup(tk.Toplevel):
     def __init__(self, master=None, initial_value=""):
         super().__init__(master)
@@ -364,6 +367,7 @@ def pick_date(parent, initial_value=""):
     return popup.result
 
 
+# Translation dictionary for English and Arabic labels used across the Tkinter interface.
 TRANSLATIONS = {
     "eng": {
         "Tkinter could not start in this environment.": "Tkinter could not start in this environment.",
@@ -682,6 +686,7 @@ TRANSLATIONS = {
 }
 
 
+# Detect physically available printers so reports can be sent to a local Windows printer.
 def get_registered_printers():
     if win32print is None:
         return []
@@ -810,6 +815,7 @@ def build_review_log_report_text(client_name="", review_text=""):
     return "\n".join(str(item) for item in lines).rstrip() + "\n"
 
 
+# Splash screen shown while the desktop app initializes and loads resources.
 def build_startup_splash():
     splash = tk.Tk()
     splash.overrideredirect(True)
@@ -908,6 +914,7 @@ def build_startup_splash():
     return splash
 
 
+# Keep a single global app instance so the overview window can be reused instead of reopening repeatedly.
 _ACTIVE_PROGRESS_APP = None
 
 
@@ -937,6 +944,7 @@ def open_welcome_home():
     welcome.mainloop()
 
 
+# Landing screen with navigation to the main client overview and payment-transaction sections.
 class WelcomeWindow(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -1134,6 +1142,7 @@ def parse_task_items(raw_value, fallback_total=0):
     return items
 
 
+# Task-plan model used to calculate progress and maintain the per-client task list.
 class Plan:
     Clients_progress = {}
 
@@ -1207,6 +1216,7 @@ class Plan:
         }
 
 
+# Window for adding, editing, and completing tasks within a selected client's plan.
 class TaskDetailsWindow(tk.Toplevel):
     def __init__(self, master=None, client_name="Client", plan=None, all_tasks=None, pending_tasks=None):
         super().__init__(master)
@@ -1407,6 +1417,7 @@ class TaskDetailsWindow(tk.Toplevel):
         self.populate_lists(all_tasks=self.plan.all_tasks, pending_tasks=self.plan.pending_tasks)
 
 
+# Contract form used to capture legal and commercial details tied to a client record.
 class ContractDetailsWindow(tk.Toplevel):
     def __init__(self, master=None):
         super().__init__(master)
@@ -1532,6 +1543,7 @@ class ContractDetailsWindow(tk.Toplevel):
         self.destroy()
 
 
+# Report preview dialog showing a generated client log without leaving the UI.
 class ClientLogPreviewWindow(tk.Toplevel):
     def __init__(self, master=None, report_text=""):
         super().__init__(master)
@@ -1554,6 +1566,7 @@ class ClientLogPreviewWindow(tk.Toplevel):
         self.protocol("WM_DELETE_WINDOW", self.destroy)
 
 
+# Payment summary window that combines contract status with the client's transaction history.
 class ClientPaymentReportWindow(tk.Toplevel):
     def __init__(self, master=None, client_name=""):
         super().__init__(master)

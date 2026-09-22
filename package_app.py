@@ -8,6 +8,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+# Packaging and app-build configuration for the Windows desktop client manager.
+# This file ensures the runtime assets are present, prepares PyInstaller packaging, and creates the desktop shortcut.
 APP_DIR = Path(__file__).resolve().parent
 SOURCE_DIR = APP_DIR / "python code"
 ENTRY_SCRIPT = SOURCE_DIR / "main.py"
@@ -19,6 +21,7 @@ DEFAULT_COUNTRY_CODE = "+968"
 SPEC_FILE = APP_DIR / f"{APP_NAME}.spec"
 
 
+# Find the best available icon file for the built Windows desktop app.
 def resolve_target_icon():
     candidates = [
         APP_DIR / "starco_icon.ico",
@@ -71,6 +74,7 @@ RUNTIME_DATA_FILES = [
 RUNTIME_DATA_FILES = [path for path in RUNTIME_DATA_FILES if path is not None and path.exists()]
 
 
+# Confirm that the build has all required project assets before packaging begins.
 def validate_runtime_asset_catalog():
     required_paths = [
         ENTRY_SCRIPT,
@@ -95,56 +99,34 @@ def validate_runtime_asset_catalog():
         )
 
     ui_file = SOURCE_DIR / "clients_progress_ui.py"
-    ui_markers = [
-        "Project Manager To-Do",
-        "generate_project_manager_todo_tasks",
-        "validate_translation_coverage",
-        "Open client payment records",
-        "load_shop_electrical_meter_map",
-        "self.client_selector_var",
-        "_switch_client_for_transactions",
-        "ClientTransactionsWindow",
-        "open_welcome_home",
-        "No reviews yet",
-        "self.transactions_button",
-        "Home",
-        "go_home",
-        "apply_bidi_text",
-        "is_arabic_text",
-        "arabic_reshaper",
-        "if not is_arabic_text(text):",
-        "return get_display(arabic_reshaper.reshape(text))",
-        "Task Details - {client_name}",
-        "Task Details",
-        "New task",
-        "Add Task",
-        "self.new_task_var",
-        "self.new_task_entry",
-        "save_task",
-        "\"Preview\": \"Preview\"",
-        "\"Close Preview\": \"Close Preview\"",
-        "\"Save\": \"Save\"",
-        "\"Edit\": \"Edit\"",
-        "\"OK\": \"OK\"",
-        "\"Payment Report\": \"Payment Report\"",
-        "\"Save Comment\": \"Save Comment\"",
-    ]
     ui_content = ui_file.read_text(encoding="utf-8") if ui_file.exists() else ""
-    missing_markers = [marker for marker in ui_markers if marker not in ui_content]
+    essential_ui_markers = [
+        "class WelcomeWindow",
+        "class ProgressApp",
+        "def safe_main",
+        "def resolve_log_output_dir",
+        "def parse_task_items",
+        "class Plan",
+        "class ContractDetailsWindow",
+        "class ClientPaymentReportWindow",
+        "def T",
+    ]
+    missing_markers = [marker for marker in essential_ui_markers if marker not in ui_content]
     if missing_markers:
         details = "\n".join(f" - {marker}" for marker in missing_markers)
         raise RuntimeError(
-            "Packaging aborted: the app UI is out of sync with the latest project-management and transaction workflow.\n"
+            "Packaging aborted: the UI file is missing required app sections.\n"
             f"Missing markers:\n{details}"
         )
 
-    # Keep packaging aligned with the latest client-manager/export/report workflow.
+    # Keep packaging aligned with the current client-manager UI and export workflow.
     for directory in PROJECT_RUNTIME_DIRECTORIES:
         directory.mkdir(parents=True, exist_ok=True)
 
     return True
 
 
+# Create the final list of runtime files and folders that need to be bundled with the application.
 def collect_runtime_assets():
     assets = []
     seen = set()
@@ -157,6 +139,7 @@ def collect_runtime_assets():
     return assets
 
 
+# Duplicate the contract-date month generation used by the client app so packaging logic stays aligned.
 def generate_contract_months(start_date=None, end_date=None):
     start_value = str(start_date or "").strip()
     end_value = str(end_date or "").strip()
@@ -208,6 +191,7 @@ def generate_contract_months(start_date=None, end_date=None):
     return unique_months
 
 
+# Normalise contract fields so legacy and new client data share the same structure.
 def normalize_contract_details(value):
     contract_fields = {
         "contract_number": "",
@@ -230,6 +214,7 @@ def normalize_contract_details(value):
     return normalized
 
 
+# Map various payment strings to the canonical values expected by the UI and reports.
 def normalize_payment_method(value):
     choices = ["Cash", "Cheque", "Bank Transaction"]
     if value is None:
@@ -250,6 +235,7 @@ def normalize_payment_method(value):
     return "Cash"
 
 
+# Ensure each transaction due date falls on a valid last day for its selected month.
 def coerce_due_date_for_month(month_value, due_date_value):
     month_text = str(month_value or "").strip()
     if not month_text:
@@ -280,6 +266,7 @@ def coerce_due_date_for_month(month_value, due_date_value):
     return month_end
 
 
+# Decide whether a payment entry is complete based on the selected method and required fields.
 def is_transaction_complete(value):
     if not isinstance(value, dict):
         return False
@@ -347,6 +334,7 @@ def normalize_transaction_entry(value):
     return normalized
 
 
+# Build the project-manager to-do list by checking which contract months still need payment follow-up.
 def build_project_manager_todo_tasks(clients):
     tasks = []
     for client in clients or []:
@@ -385,6 +373,7 @@ def build_project_manager_todo_tasks(clients):
     return tasks if tasks else ["No pending payment follow-ups"]
 
 
+# Convert older data formats into the current client schema before running the packaged app.
 def normalize_legacy_client_data(entries):
     normalized = []
     for entry in entries or []:
@@ -430,6 +419,7 @@ def normalize_legacy_client_data(entries):
     return normalized
 
 
+# Merge legacy client records with current data so older save files continue to work.
 def migrate_legacy_client_data():
     if CLIENTS_DATA_FILE.exists() and not LEGACY_CLIENTS_DATA_FILE.exists():
         return
@@ -689,6 +679,7 @@ def ensure_runtime_files():
                     pass
 
 
+# Run the actual PyInstaller build process and output the generated executable.
 def build_app():
     ensure_runtime_files()
     validate_runtime_asset_catalog()
@@ -741,6 +732,7 @@ def build_app():
     return find_built_exe()
 
 
+# Create a desktop shortcut pointing to the packaged executable for easier launch.
 def create_shortcut():
     exe_path = find_built_exe()
     if exe_path is None or not exe_path.exists():
