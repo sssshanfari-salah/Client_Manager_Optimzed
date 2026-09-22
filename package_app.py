@@ -81,6 +81,10 @@ def validate_runtime_asset_catalog():
         SOURCE_DIR / "main.py",
         SOURCE_DIR / "clients_management.py",
         SOURCE_DIR / "clients_progress_ui.py",
+        SOURCE_DIR / "ui_windows.py",
+        SOURCE_DIR / "ui_main_app.py",
+        SOURCE_DIR / "ui_shared.py",
+        SOURCE_DIR / "ui_actions",
         CLIENTS_DATA_FILE,
         LEGACY_CLIENTS_DATA_FILE,
         COUNTRY_CODES_DATA,
@@ -98,11 +102,25 @@ def validate_runtime_asset_catalog():
             f"{details}"
         )
 
-    ui_file = SOURCE_DIR / "clients_progress_ui.py"
-    ui_content = ui_file.read_text(encoding="utf-8") if ui_file.exists() else ""
+    ui_files = [
+        SOURCE_DIR / "ui_main_app.py",
+        SOURCE_DIR / "ui_windows.py",
+        SOURCE_DIR / "clients_progress_ui.py",
+    ]
+    ui_content = ""
+    ui_file = None
+    for candidate in ui_files:
+        if candidate.exists():
+            ui_file = candidate
+            ui_content = candidate.read_text(encoding="utf-8")
+            break
+
+    if ui_file is None:
+        raise RuntimeError("Packaging aborted: no UI entry file was found for the client manager app.")
+
     essential_ui_markers = [
-        "class WelcomeWindow",
         "class ProgressApp",
+        "class WelcomeWindow",
         "def safe_main",
         "def resolve_log_output_dir",
         "def parse_task_items",
@@ -111,11 +129,17 @@ def validate_runtime_asset_catalog():
         "class ClientPaymentReportWindow",
         "def T",
     ]
-    missing_markers = [marker for marker in essential_ui_markers if marker not in ui_content]
-    if missing_markers:
-        details = "\n".join(f" - {marker}" for marker in missing_markers)
+    legacy_ui_markers = [
+        "from ui_windows import *",
+        "from ui_main_app import ProgressApp",
+    ]
+    window_coverage = any(marker in ui_content for marker in essential_ui_markers)
+    compatibility_coverage = any(marker in ui_content for marker in legacy_ui_markers)
+
+    if not (window_coverage or compatibility_coverage):
+        details = "\n".join(f" - {marker}" for marker in essential_ui_markers)
         raise RuntimeError(
-            "Packaging aborted: the UI file is missing required app sections.\n"
+            "Packaging aborted: the UI layout is missing required app sections.\n"
             f"Missing markers:\n{details}"
         )
 

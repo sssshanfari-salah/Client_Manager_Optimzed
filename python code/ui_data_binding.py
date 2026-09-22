@@ -1,0 +1,100 @@
+"""Data-binding helper methods for mapping client state to Tk widgets."""
+
+import tkinter as tk
+
+from business_logic import Plan
+from translations import T
+
+
+class DataBindingMixin:
+    """Helpers that keep the widget state synchronized with the current client model."""
+
+    def refresh_client_combo(self):
+        self.client_manager.load_clients()
+        names = [client.name for client in self.client_manager.clients]
+        values = ["<New Client>"] + names
+        self.client_combo.configure(values=values)
+        current_value = self.client_name_var.get()
+        if current_value in values:
+            self.client_combo.set(current_value)
+        else:
+            self.client_combo.set("<New Client>")
+
+    def refresh_display(self):
+        if self.plan is None:
+            self.all_tasks_box.delete(0, tk.END)
+            self.pending_tasks_box.delete(0, tk.END)
+            self.all_tasks_box.insert(tk.END, T("No client selected"))
+            self.pending_tasks_box.insert(tk.END, T("No pending tasks"))
+            return
+
+        self.all_tasks_box.delete(0, tk.END)
+        self.pending_tasks_box.delete(0, tk.END)
+        for index, task in enumerate(self.plan.all_tasks, start=1):
+            self.all_tasks_box.insert(tk.END, self.format_task_entry(task, number=index))
+        if not self.plan.pending_tasks:
+            self.pending_tasks_box.insert(tk.END, T("No pending tasks"))
+        else:
+            for index, task in enumerate(self.plan.pending_tasks, start=1):
+                self.pending_tasks_box.insert(tk.END, self.format_task_entry(task, number=index))
+
+        self.progress_var.set(f"{self.plan.progress}%")
+        self.progress_bar["value"] = self.plan.progress
+
+    def clear_client_form(self):
+        self.plan = None
+        self.client_name_var.set("<New Client>")
+        self.contact_var.set("")
+        self.business_var.set("")
+        self.shop_number_var.set("")
+        self.address_var.set("")
+        self.electrical_meter_var.set("")
+        self.email_var.set("")
+        self.total_tasks_var.set("0")
+        self.progress_var.set("0%")
+        self.progress_bar["value"] = 0
+        self.all_tasks_box.delete(0, tk.END)
+        self.pending_tasks_box.delete(0, tk.END)
+        self.all_tasks_box.insert(tk.END, T("No client selected"))
+        self.pending_tasks_box.insert(tk.END, T("No pending tasks"))
+
+    def load_client_progress(self, client_name):
+        self.client_manager.load_clients()
+        client = next((item for item in self.client_manager.clients if item.name.lower() == client_name.lower()), None)
+        if client is None:
+            from clients_management import Client
+            client = Client(client_name, "", self.business_var.get() or "")
+
+        self.client_name_var.set(client.name)
+        self.business_var.set(client.business)
+        self.email_var.set(client.email)
+        self.contact_var.set(client.contact)
+        self.shop_number_var.set(str(client.shop_number))
+        saved = Plan.Clients_progress.get(client_name, {})
+        all_tasks = list(saved.get("all_tasks", []))
+        pending_tasks = list(saved.get("pending_tasks", all_tasks))
+        self.plan = Plan(client, all_tasks=all_tasks)
+        self.plan.sync_task_lists(all_tasks=all_tasks, pending_tasks=pending_tasks)
+        self.total_tasks_var.set(str(len(self.plan.all_tasks)))
+        self.refresh_display()
+
+    def on_client_name_selected(self, event=None):
+        name = self.client_name_var.get().strip()
+        if not name or name == "<New Client>":
+            self.clear_client_form()
+            return
+        self.load_client_progress(name)
+
+    @staticmethod
+    def format_task_entry(task, number=None):
+        text = str(task).strip()
+        if number is not None:
+            return f"{number}. {text}" if text else f"{number}."
+        return text if text else ""
+
+    def refresh_lang_ui(self):
+        for widget, original_text in getattr(self, "translatable_labels", []):
+            try:
+                widget.configure(text=T(original_text))
+            except Exception:
+                pass
