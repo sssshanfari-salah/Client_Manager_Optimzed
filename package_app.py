@@ -15,7 +15,7 @@ SOURCE_DIR = APP_DIR / "python code"
 ENTRY_SCRIPT = SOURCE_DIR / "main.py"
 DIST_DIR = APP_DIR / "dist"
 BUILD_DIR = APP_DIR / "build"
-APP_NAME = "marketing_booster_ar"
+APP_NAME = "clients_manager"
 APP_DISPLAY_NAME = "Clients Manager"
 DEFAULT_COUNTRY_CODE = "+968"
 SPEC_FILE = APP_DIR / f"{APP_NAME}.spec"
@@ -50,6 +50,7 @@ APP_MODULE_FILES = [
 def resolve_target_icon():
     candidates = [
         APP_DIR / "starco_icon.ico",
+        SOURCE_DIR / "starco_icon.ico",
         APP_DIR / "starco icon" / "starco_icon.ico",
         APP_DIR / "starco icon" / "icon.ico",
         APP_DIR / "starco icon" / "app_icon.ico",
@@ -87,7 +88,7 @@ PROJECT_RUNTIME_DIRECTORIES = [
 ]
 REQUIRED_RUNTIME_DIRECTORIES = list(PROJECT_RUNTIME_DIRECTORIES)
 LEGACY_APP_NAMES = ["marketing_booster", "marketing_booster_ar"]
-LEGACY_DISPLAY_NAMES = ["Marketing Booster", "Marketing Booster AR", "Clients Manager", "Starco Commercial Complex"]
+LEGACY_DISPLAY_NAMES = ["Marketing Booster", "Marketing Booster AR", "Starco Commercial Complex"]
 RUNTIME_DATA_FILES = [
     TARGET_ICON,
     CLIENTS_DATA_FILE,
@@ -120,6 +121,7 @@ def validate_runtime_asset_catalog():
         SHOPS_ELECTRICAL_METERS_FILE,
         DOCUMENTS_DATA_FILE,
         SUPPORTING_DOCUMENTS_DIR,
+        TARGET_ICON,
         *REQUIRED_RUNTIME_DIRECTORIES,
     ]
 
@@ -606,6 +608,8 @@ def find_built_exe():
     candidates = [
         DIST_DIR / f"{APP_NAME}.exe",
         DIST_DIR / APP_NAME / f"{APP_NAME}.exe",
+        DIST_DIR / f"{APP_DISPLAY_NAME}.exe",
+        DIST_DIR / APP_DISPLAY_NAME / f"{APP_DISPLAY_NAME}.exe",
     ]
     for candidate in candidates:
         if candidate.exists():

@@ -1154,6 +1154,7 @@ class WelcomeWindow(tk.Tk):
         actions.grid(row=2, column=1, sticky="e", pady=(4, 0))
         ttk.Button(actions, text=T("Register"), command=self.open_registration_window).pack(side="left", padx=(0, 8))
         ttk.Button(actions, text=T("Login"), command=self.login_user).pack(side="left", padx=(0, 8))
+        ttk.Button(actions, text=T("Logout"), command=self.logout_user).pack(side="left", padx=(0, 8))
         ttk.Button(actions, text=T("Save User"), command=self.save_user_profile).pack(side="left")
 
         main_frame = ttk.Frame(self, padding=(24, 8, 24, 18))
@@ -1214,8 +1215,16 @@ class WelcomeWindow(tk.Tk):
 
         footer = ttk.Frame(self, padding=(0, 0, 24, 18))
         footer.pack(fill="x")
-        exit_button = ttk.Button(footer, text=T("Exit"), command=self.destroy, style="Action.TButton", width=14)
+        exit_button = ttk.Button(footer, text=T("Exit"), command=self.exit_app, style="Action.TButton", width=14)
         exit_button.pack(anchor="center")
+        self.protocol("WM_DELETE_WINDOW", self.exit_app)
+
+    def exit_app(self):
+        self.user_name_var.set("")
+        self.user_email_var.set("")
+        self.login_status_var.set("")
+        self.guest_mode = True
+        self.destroy()
 
     def open_registration_window(self):
         registration = UserRegistrationWindow(self)
@@ -1275,6 +1284,18 @@ class WelcomeWindow(tk.Tk):
         self.user_email_var.set(user_email)
         self._refresh_login_status()
         messagebox.showinfo(T("Login"), T("Login successful. Access granted to the app."))
+        self.destroy()
+        welcome = WelcomeWindow()
+        welcome.protocol("WM_DELETE_WINDOW", welcome.destroy)
+        welcome.mainloop()
+
+    def logout_user(self):
+        self.user_name_var.set("")
+        self.user_email_var.set("")
+        self.guest_mode = True
+        self.login_status_var.set("")
+        self._refresh_login_status()
+        messagebox.showinfo(T("Logout"), T("You have logged out and returned to guest access."))
         self.destroy()
         welcome = WelcomeWindow()
         welcome.protocol("WM_DELETE_WINDOW", welcome.destroy)
