@@ -1,0 +1,39 @@
+# -*- mode: python ; coding: utf-8 -*-
+
+
+a = Analysis(
+    ['C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/python code/main.py'],
+    pathex=[],
+    binaries=[],
+    datas=[('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/starco_icon.ico', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/clients.json', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/python code/country_codes.json', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/python code/Shops_Elect_meters.json', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/python code/docs/documents.txt', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/supporting_documents/starco_rent_contract_1.pdf', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/supporting_documents', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/starco icon', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/python code', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/python code/docs', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/Clients', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/application_outputs', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/application_outputs/clients_logs', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/application_outputs/tasks_logs', '.'), ('C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/application_outputs/observation_logs', '.')],
+    hiddenimports=[],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    noarchive=False,
+    optimize=0,
+)
+pyz = PYZ(a.pure)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    [],
+    name='marketing_booster_ar',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=['C:/Users/ssssh/OneDrive/Documents/Marketing_booster_ar/starco_icon.ico'],
+)
