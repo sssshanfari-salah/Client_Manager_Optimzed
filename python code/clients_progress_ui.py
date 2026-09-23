@@ -117,6 +117,14 @@ def is_admin_registration_allowed(user_name, email_account):
     return name == "admin" and email == "admin"
 
 
+def is_registration_submission_allowed(user_name, email_account):
+    name = str(user_name or "").strip()
+    email = str(email_account or "").strip()
+    if not name or not email:
+        return False
+    return True
+
+
 def load_user_profile():
     for file_path in (USERS_FILE, LEGACY_USER_PROFILE_FILE):
         payload = _read_json_file(file_path)
@@ -150,7 +158,7 @@ def user_registeration(user_name, email_account):
         "email": str(email_account or "").strip(),
     }
 
-    if not is_admin_registration_allowed(profile["name"], profile["email"]):
+    if not is_registration_submission_allowed(profile["name"], profile["email"]):
         return {"name": "", "email": ""}
 
     users = load_registered_users()
@@ -1579,6 +1587,7 @@ class UserRegistrationWindow(tk.Toplevel):
         self.user_name_var = tk.StringVar(value="")
         self.user_email_var = tk.StringVar(value="")
         self.registration_status_var = tk.StringVar(value="Registration disabled")
+        self.editing_enabled = False
 
         main = ttk.Frame(self, padding=16)
         main.pack(fill="both", expand=True)
@@ -1594,6 +1603,8 @@ class UserRegistrationWindow(tk.Toplevel):
 
         actions = ttk.Frame(main)
         actions.grid(row=3, column=0, columnspan=2, sticky="e", pady=(8, 0))
+        self.confirm_edit_button = ttk.Button(actions, text=T("Confirm"), command=self.confirm_admin_access, state="disabled")
+        self.confirm_edit_button.pack(side="left", padx=(0, 8))
         self.save_user_button = ttk.Button(actions, text=T("Save User"), command=self.register_user, state="disabled")
         self.save_user_button.pack(side="left", padx=(0, 8))
         ttk.Button(actions, text=T("Reset"), command=self.reset_fields).pack(side="left", padx=(0, 8))
@@ -1603,6 +1614,22 @@ class UserRegistrationWindow(tk.Toplevel):
         self.user_email_var.trace_add("write", lambda *_: self.update_registration_state())
         self.update_registration_state()
 
+    def confirm_admin_access(self):
+        user_name = self.user_name_var.get().strip()
+        user_email = self.user_email_var.get().strip()
+
+        if not is_admin_registration_allowed(user_name, user_email):
+            self.registration_status_var.set("Registration disabled")
+            self.save_user_button.configure(state="disabled")
+            return
+
+        self.editing_enabled = True
+        self.user_name_var.set("")
+        self.user_email_var.set("")
+        self.registration_status_var.set("Editing enabled")
+        self.confirm_edit_button.configure(state="disabled")
+        self.save_user_button.configure(state="disabled")
+
     def update_registration_state(self):
         user_name = self.user_name_var.get().strip()
         user_email = self.user_email_var.get().strip()
@@ -1610,18 +1637,32 @@ class UserRegistrationWindow(tk.Toplevel):
         has_new_user_entry = bool(user_name) and bool(user_email) and not admin_mode
 
         if admin_mode:
-            self.registration_status_var.set("Registration enabled")
+            self.registration_status_var.set("Editing enabled")
+            self.confirm_edit_button.configure(state="normal")
             self.save_user_button.configure(state="disabled")
-        elif has_new_user_entry:
+            return
+
+        if self.editing_enabled and has_new_user_entry:
             self.registration_status_var.set("Registration enabled")
             self.save_user_button.configure(state="normal")
-        else:
-            self.registration_status_var.set("Registration disabled")
+            return
+
+        if self.editing_enabled:
+            self.registration_status_var.set("Editing enabled")
             self.save_user_button.configure(state="disabled")
+            return
+
+        self.registration_status_var.set("Registration disabled")
+        self.confirm_edit_button.configure(state="disabled")
+        self.save_user_button.configure(state="disabled")
 
     def reset_fields(self):
+        self.editing_enabled = False
         self.user_name_var.set("")
         self.user_email_var.set("")
+        self.registration_status_var.set("Registration disabled")
+        self.confirm_edit_button.configure(state="disabled")
+        self.save_user_button.configure(state="disabled")
 
     def close_to_login(self):
         self.destroy()
@@ -1642,13 +1683,13 @@ class UserRegistrationWindow(tk.Toplevel):
             messagebox.showwarning(T("User Email"), T("Please enter your email address."))
             return
 
-        if not is_admin_registration_allowed(user_name, user_email):
-            messagebox.showwarning(T("User Registration"), T("Registration is only available for Admin/Admin."))
+        if not is_registration_submission_allowed(user_name, user_email):
+            messagebox.showwarning(T("User Registration"), T("Please enter both a valid user name and email address."))
             return
 
         profile = user_registeration(user_name, user_email)
         if not profile.get("name") or not profile.get("email"):
-            messagebox.showwarning(T("User Registration"), T("Registration is only available for Admin/Admin."))
+            messagebox.showwarning(T("User Registration"), T("Please enter a valid user name and email address."))
             return
 
         if self.master is not None and hasattr(self.master, "user_name_var"):
