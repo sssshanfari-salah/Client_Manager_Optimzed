@@ -50,7 +50,10 @@ if APP_ICON is None:
 CURRENT_LANGUAGE = "eng"
 APP_ROOT = Path(__file__).resolve().parent.parent
 USERS_FILE = APP_ROOT / "users.json"
+GUESTS_FILE = APP_ROOT / "guests.json"
 LEGACY_USER_PROFILE_FILE = APP_ROOT / "user_profile.json"
+
+CURRENT_SESSION_PROFILE = {"name": "", "email": ""}
 
 COUNTRY_CODES_PATH = Path(__file__).resolve().parent / "country_codes.json"
 
@@ -108,6 +111,12 @@ def verify_registered_user(user_name, email_account):
     return False
 
 
+def is_admin_registration_allowed(user_name, email_account):
+    name = str(user_name or "").strip().lower()
+    email = str(email_account or "").strip().lower()
+    return name == "admin" and email == "admin"
+
+
 def load_user_profile():
     for file_path in (USERS_FILE, LEGACY_USER_PROFILE_FILE):
         payload = _read_json_file(file_path)
@@ -140,6 +149,10 @@ def user_registeration(user_name, email_account):
         "name": str(user_name or "").strip(),
         "email": str(email_account or "").strip(),
     }
+
+    if not is_admin_registration_allowed(profile["name"], profile["email"]):
+        return {"name": "", "email": ""}
+
     users = load_registered_users()
 
     if profile["name"] or profile["email"]:
@@ -162,6 +175,84 @@ def user_registration(user_name, email_account):
 
 def save_user_profile(name, email):
     return user_registeration(name, email)
+
+
+def _normalize_guest_record(payload):
+    if not isinstance(payload, dict):
+        return {"name": "", "email": ""}
+    return {
+        "name": str(payload.get("name") or payload.get("guest_name") or "").strip(),
+        "email": str(payload.get("email") or payload.get("guest_email") or "").strip(),
+    }
+
+
+def load_guest_profiles():
+    payload = _read_json_file(GUESTS_FILE)
+
+    if isinstance(payload, dict):
+        guests = payload.get("guests") if isinstance(payload.get("guests"), list) else []
+        if isinstance(guests, list):
+            return [_normalize_guest_record(item) for item in guests if isinstance(item, dict)]
+        single_guest = _normalize_guest_record(payload)
+        if single_guest["name"] or single_guest["email"]:
+            return [single_guest]
+        return []
+
+    if isinstance(payload, list):
+        return [_normalize_guest_record(item) for item in payload if isinstance(item, dict)]
+
+    return []
+
+
+def save_guest_profile(name, email):
+    profile = {
+        "name": str(name or "").strip() or "Guest",
+        "email": str(email or "").strip() or "Guest",
+    }
+    guests = load_guest_profiles()
+
+    existing_index = next(
+        (
+            index
+            for index, item in enumerate(guests)
+            if item.get("name", "").strip().lower() == profile["name"].lower()
+            and item.get("email", "").strip().lower() == profile["email"].lower()
+        ),
+        None,
+    )
+    if existing_index is not None:
+        guests[existing_index] = profile
+    else:
+        guests.append(profile)
+
+    _write_json_file(GUESTS_FILE, {"guests": guests})
+    return profile
+
+
+def is_guest_profile(profile=None):
+    if profile is None:
+        profile = CURRENT_SESSION_PROFILE
+
+    user_name = str(profile.get("name") or "").strip().lower()
+    user_email = str(profile.get("email") or "").strip().lower()
+    return user_name == "guest" and user_email == "guest"
+
+
+def is_guest_login_credentials(user_name, email_account):
+    name = str(user_name or "").strip().lower()
+    email = str(email_account or "").strip().lower()
+    return name == "guest" and email == "guest"
+
+
+def set_current_session_profile(profile=None, user_name=None, user_email=None):
+    if profile is not None:
+        CURRENT_SESSION_PROFILE["name"] = str(profile.get("name") or "").strip()
+        CURRENT_SESSION_PROFILE["email"] = str(profile.get("email") or "").strip()
+        return CURRENT_SESSION_PROFILE
+
+    CURRENT_SESSION_PROFILE["name"] = str(user_name or "").strip()
+    CURRENT_SESSION_PROFILE["email"] = str(user_email or "").strip()
+    return CURRENT_SESSION_PROFILE
 
 
 def is_registered_user_profile(profile=None):
@@ -1083,10 +1174,10 @@ class WelcomeWindow(tk.Tk):
         self.minsize(620, 420)
         self.configure(bg="#eef2ff")
 
-        self.user_name_var = tk.StringVar(value=load_user_profile().get("name", ""))
-        self.user_email_var = tk.StringVar(value=load_user_profile().get("email", ""))
+        self.user_name_var = tk.StringVar(value="")
+        self.user_email_var = tk.StringVar(value="")
         self.login_status_var = tk.StringVar(value="")
-        self.guest_mode = not is_registered_user_profile({"name": self.user_name_var.get(), "email": self.user_email_var.get()})
+        self.guest_mode = True
 
         header = ttk.Frame(self, padding=(28, 22, 28, 12))
         header.pack(fill="x")
@@ -1140,22 +1231,32 @@ class WelcomeWindow(tk.Tk):
 
         self._refresh_login_status()
 
-        profile_frame = ttk.LabelFrame(self, text=T("User Profile"), padding=(16, 10))
+        profile_frame = ttk.Frame(self, padding=(16, 10))
         profile_frame.pack(fill="x", padx=24, pady=(0, 10))
-        profile_frame.columnconfigure(1, weight=1)
-
-        ttk.Label(profile_frame, text=T("User Name")).grid(row=0, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
-        ttk.Entry(profile_frame, textvariable=self.user_name_var, width=32).grid(row=0, column=1, sticky="ew", pady=(0, 6))
-
-        ttk.Label(profile_frame, text=T("User Email")).grid(row=1, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
-        ttk.Entry(profile_frame, textvariable=self.user_email_var, width=32).grid(row=1, column=1, sticky="ew", pady=(0, 6))
+        profile_frame.columnconfigure(0, weight=1)
 
         actions = ttk.Frame(profile_frame)
-        actions.grid(row=2, column=1, sticky="e", pady=(4, 0))
+        actions.grid(row=0, column=0, sticky="e", pady=(0, 8))
+        ttk.Button(actions, text="Guest", command=self.use_guest_profile).pack(side="left", padx=(0, 8))
         ttk.Button(actions, text=T("Register"), command=self.open_registration_window).pack(side="left", padx=(0, 8))
-        ttk.Button(actions, text=T("Login"), command=self.login_user).pack(side="left", padx=(0, 8))
+        ttk.Button(actions, text=T("Login"), command=self.open_login_window).pack(side="left", padx=(0, 8))
         ttk.Button(actions, text=T("Logout"), command=self.logout_user).pack(side="left", padx=(0, 8))
-        ttk.Button(actions, text=T("Save User"), command=self.save_user_profile).pack(side="left")
+
+        todo_label = ttk.Label(profile_frame, text=T("Project Manager To-Do"), font=("Segoe UI", 11, "bold"))
+        todo_label.grid(row=1, column=0, sticky="w", pady=(10, 6))
+
+        self.todo_listbox = tk.Listbox(
+            profile_frame,
+            height=7,
+            width=60,
+            exportselection=False,
+            bg="#fffdf3",
+            relief="solid",
+            borderwidth=1,
+            font=("Segoe UI", 10),
+        )
+        self.todo_listbox.grid(row=2, column=0, sticky="nsew", pady=(0, 10))
+        profile_frame.rowconfigure(2, weight=1)
 
         main_frame = ttk.Frame(self, padding=(24, 8, 24, 18))
         main_frame.pack(fill="both", expand=True)
@@ -1187,22 +1288,6 @@ class WelcomeWindow(tk.Tk):
         )
         self.transactions_button.grid(row=0, column=1, padx=(8, 12), pady=(20, 10), sticky="nsew")
 
-        todo_label = ttk.Label(main_frame, text=T("Project Manager To-Do"), font=("Segoe UI", 11, "bold"))
-        todo_label.grid(row=1, column=0, sticky="w", padx=(12, 0), pady=(0, 6))
-
-        self.todo_listbox = tk.Listbox(
-            main_frame,
-            height=8,
-            width=50,
-            exportselection=False,
-            bg="#fffdf3",
-            relief="solid",
-            borderwidth=1,
-            font=("Segoe UI", 10),
-        )
-        self.todo_listbox.grid(row=2, column=0, sticky="nsew", padx=(12, 8), pady=(0, 10))
-        main_frame.rowconfigure(2, weight=1)
-
         self.transactions_hint = ttk.Label(
             main_frame,
             text=T("Open client payment records"),
@@ -1210,7 +1295,7 @@ class WelcomeWindow(tk.Tk):
             foreground="#374151",
             wraplength=150,
         )
-        self.transactions_hint.grid(row=2, column=1, sticky="n", padx=(8, 12), pady=(18, 0))
+        self.transactions_hint.grid(row=1, column=1, sticky="n", padx=(8, 12), pady=(18, 0))
         self.refresh_todo_list()
 
         footer = ttk.Frame(self, padding=(0, 0, 24, 18))
@@ -1226,6 +1311,12 @@ class WelcomeWindow(tk.Tk):
         self.guest_mode = True
         self.destroy()
 
+    def open_login_window(self):
+        login_window = LoginWindow(self)
+        login_window.grab_set()
+        login_window.wait_window()
+        self._refresh_login_status()
+
     def open_registration_window(self):
         registration = UserRegistrationWindow(self)
         registration.grab_set()
@@ -1235,6 +1326,18 @@ class WelcomeWindow(tk.Tk):
             self.user_name_var.set(current["name"])
         if current.get("email"):
             self.user_email_var.set(current["email"])
+        self._refresh_login_status()
+
+    def use_guest_profile(self):
+        profile = save_guest_profile("Guest", "Guest")
+        self.user_name_var.set(profile["name"])
+        self.user_email_var.set(profile["email"])
+        self._refresh_login_status()
+
+    def _apply_logged_in_user(self, user_name, user_email):
+        set_current_session_profile(user_name=user_name, user_email=user_email)
+        self.user_name_var.set(user_name)
+        self.user_email_var.set(user_email)
         self._refresh_login_status()
 
     def _refresh_login_status(self):
@@ -1249,7 +1352,7 @@ class WelcomeWindow(tk.Tk):
 
         if profile["name"] or profile["email"]:
             self.guest_mode = True
-            self.login_status_var.set(T("Logged in as {user_name}", user_name=profile["name"] or "Guest"))
+            self.login_status_var.set("Guest user selected")
             return
 
         self.guest_mode = True
@@ -1267,10 +1370,25 @@ class WelcomeWindow(tk.Tk):
             messagebox.showwarning(T("User Email"), T("Please enter your email address."))
             return
 
+        if is_guest_login_credentials(user_name, user_email):
+            save_guest_profile(user_name, user_email)
+            self.guest_mode = True
+            self.user_name_var.set(user_name)
+            self.user_email_var.set(user_email)
+            set_current_session_profile(user_name=user_name, user_email=user_email)
+            self._refresh_login_status()
+            messagebox.showinfo(T("Login"), T("Guest read-only access enabled. Overview is view-only."))
+            self.destroy()
+            welcome = WelcomeWindow()
+            welcome.protocol("WM_DELETE_WINDOW", welcome.destroy)
+            welcome.mainloop()
+            return
+
         if not verify_registered_user(user_name, user_email):
             self.guest_mode = True
             self.user_name_var.set(user_name)
             self.user_email_var.set(user_email)
+            set_current_session_profile(user_name=user_name, user_email=user_email)
             self._refresh_login_status()
             messagebox.showwarning(
                 T("Login failed"),
@@ -1280,6 +1398,7 @@ class WelcomeWindow(tk.Tk):
 
         self.guest_mode = False
         save_user_profile(user_name, user_email)
+        set_current_session_profile(user_name=user_name, user_email=user_email)
         self.user_name_var.set(user_name)
         self.user_email_var.set(user_email)
         self._refresh_login_status()
@@ -1312,10 +1431,28 @@ class WelcomeWindow(tk.Tk):
             messagebox.showwarning(T("User Email"), T("Please enter your email address."))
             return
 
+        if not is_admin_registration_allowed(user_name, user_email):
+            messagebox.showwarning(T("User Registration"), T("Registration is only available for Admin/Admin."))
+            return
+
+        if is_guest_login_credentials(user_name, user_email):
+            save_guest_profile(user_name, user_email)
+            self.guest_mode = True
+            self.user_name_var.set(user_name)
+            self.user_email_var.set(user_email)
+            set_current_session_profile(user_name=user_name, user_email=user_email)
+            self._refresh_login_status()
+            messagebox.showinfo(
+                T("User Login"),
+                T("Guest read-only access enabled. Overview is view-only."),
+            )
+            return
+
         if not verify_registered_user(user_name, user_email):
             self.guest_mode = True
             self.user_name_var.set(user_name)
             self.user_email_var.set(user_email)
+            set_current_session_profile(user_name=user_name, user_email=user_email)
             self._refresh_login_status()
             messagebox.showinfo(
                 T("User Login"),
@@ -1325,22 +1462,23 @@ class WelcomeWindow(tk.Tk):
 
         self.guest_mode = False
         save_user_profile(user_name, user_email)
+        set_current_session_profile(user_name=user_name, user_email=user_email)
         self.user_name_var.set(user_name)
         self.user_email_var.set(user_email)
         self._refresh_login_status()
         messagebox.showinfo(T("User Profile"), T("User profile confirmed successfully."))
 
 
-class UserRegistrationWindow(tk.Toplevel):
+class LoginWindow(tk.Toplevel):
     def __init__(self, master=None):
         super().__init__(master)
-        self.title(T("User Registration"))
+        self.title(T("User Login"))
         self.geometry("420x220")
         self.minsize(340, 180)
         self.transient(master)
 
-        self.user_name_var = tk.StringVar(value="")
-        self.user_email_var = tk.StringVar(value="")
+        self.user_name_var = tk.StringVar(value=(master.user_name_var.get() if master is not None and hasattr(master, "user_name_var") else ""))
+        self.user_email_var = tk.StringVar(value=(master.user_email_var.get() if master is not None and hasattr(master, "user_email_var") else ""))
 
         main = ttk.Frame(self, padding=16)
         main.pack(fill="both", expand=True)
@@ -1354,8 +1492,136 @@ class UserRegistrationWindow(tk.Toplevel):
 
         actions = ttk.Frame(main)
         actions.grid(row=2, column=0, columnspan=2, sticky="e", pady=(12, 0))
-        ttk.Button(actions, text=T("Save User"), command=self.register_user).pack(side="left", padx=(0, 8))
+        ttk.Button(actions, text=T("Login"), command=self.login_user).pack(side="left", padx=(0, 8))
+        ttk.Button(actions, text=T("Reset"), command=self.reset_fields).pack(side="left", padx=(0, 8))
+        ttk.Button(actions, text=T("Cansel"), command=self.close_to_welcome).pack(side="left")
+
+    def reset_fields(self):
+        self.user_name_var.set("")
+        self.user_email_var.set("")
+
+    def close_to_welcome(self):
+        self.destroy()
+        if self.master is not None and hasattr(self.master, "focus_set"):
+            try:
+                self.master.focus_set()
+            except Exception:
+                pass
+
+    def login_user(self):
+        user_name = self.user_name_var.get().strip()
+        user_email = self.user_email_var.get().strip()
+
+        if not user_name:
+            messagebox.showwarning(T("User Name"), T("Please enter your user name."))
+            return
+
+        if not user_email:
+            messagebox.showwarning(T("User Email"), T("Please enter your email address."))
+            return
+
+        if is_guest_login_credentials(user_name, user_email):
+            save_guest_profile(user_name, user_email)
+            if self.master is not None and hasattr(self.master, "_apply_logged_in_user"):
+                self.master._apply_logged_in_user(user_name, user_email)
+            self.destroy()
+            if self.master is not None and hasattr(self.master, "destroy"):
+                try:
+                    self.master.destroy()
+                except Exception:
+                    pass
+            app = open_overview_window()
+            try:
+                app.deiconify()
+                app.lift()
+                app.focus_set()
+            except Exception:
+                pass
+            messagebox.showinfo(T("Login"), T("Guest read-only access enabled. Overview is view-only."))
+            return
+
+        if not verify_registered_user(user_name, user_email):
+            if self.master is not None and hasattr(self.master, "_apply_logged_in_user"):
+                self.master._apply_logged_in_user(user_name, user_email)
+            messagebox.showwarning(
+                T("Login failed"),
+                T("User not found in the saved user list. Please register first or continue as guest."),
+            )
+            return
+
+        save_user_profile(user_name, user_email)
+        if self.master is not None and hasattr(self.master, "_apply_logged_in_user"):
+            self.master._apply_logged_in_user(user_name, user_email)
+        self.destroy()
+        if self.master is not None and hasattr(self.master, "destroy"):
+            try:
+                self.master.destroy()
+            except Exception:
+                pass
+        app = open_overview_window()
+        try:
+            app.deiconify()
+            app.lift()
+            app.focus_set()
+        except Exception:
+            pass
+        messagebox.showinfo(T("Login"), T("Login successful. Access granted to the app."))
+
+
+class UserRegistrationWindow(tk.Toplevel):
+    def __init__(self, master=None):
+        super().__init__(master)
+        self.title(T("User Registration"))
+        self.geometry("420x220")
+        self.minsize(340, 180)
+        self.transient(master)
+
+        self.user_name_var = tk.StringVar(value="")
+        self.user_email_var = tk.StringVar(value="")
+        self.registration_status_var = tk.StringVar(value="Registration disabled")
+
+        main = ttk.Frame(self, padding=16)
+        main.pack(fill="both", expand=True)
+        main.columnconfigure(1, weight=1)
+
+        ttk.Label(main, text=T("User Name")).grid(row=0, column=0, sticky="w", padx=(0, 8), pady=(0, 8))
+        ttk.Entry(main, textvariable=self.user_name_var, width=32).grid(row=0, column=1, sticky="ew", pady=(0, 8))
+
+        ttk.Label(main, text=T("User Email")).grid(row=1, column=0, sticky="w", padx=(0, 8), pady=(0, 8))
+        ttk.Entry(main, textvariable=self.user_email_var, width=32).grid(row=1, column=1, sticky="ew", pady=(0, 8))
+
+        ttk.Label(main, textvariable=self.registration_status_var, foreground="#0f766e", font=("Segoe UI", 9, "bold")).grid(row=2, column=0, columnspan=2, sticky="w", pady=(0, 8))
+
+        actions = ttk.Frame(main)
+        actions.grid(row=3, column=0, columnspan=2, sticky="e", pady=(8, 0))
+        self.save_user_button = ttk.Button(actions, text=T("Save User"), command=self.register_user, state="disabled")
+        self.save_user_button.pack(side="left", padx=(0, 8))
+        ttk.Button(actions, text=T("Reset"), command=self.reset_fields).pack(side="left", padx=(0, 8))
         ttk.Button(actions, text=T("Cansel"), command=self.close_to_login).pack(side="left")
+
+        self.user_name_var.trace_add("write", lambda *_: self.update_registration_state())
+        self.user_email_var.trace_add("write", lambda *_: self.update_registration_state())
+        self.update_registration_state()
+
+    def update_registration_state(self):
+        user_name = self.user_name_var.get().strip()
+        user_email = self.user_email_var.get().strip()
+        admin_mode = user_name.lower() == "admin" and user_email.lower() == "admin"
+        has_new_user_entry = bool(user_name) and bool(user_email) and not admin_mode
+
+        if admin_mode:
+            self.registration_status_var.set("Registration enabled")
+            self.save_user_button.configure(state="disabled")
+        elif has_new_user_entry:
+            self.registration_status_var.set("Registration enabled")
+            self.save_user_button.configure(state="normal")
+        else:
+            self.registration_status_var.set("Registration disabled")
+            self.save_user_button.configure(state="disabled")
+
+    def reset_fields(self):
+        self.user_name_var.set("")
+        self.user_email_var.set("")
 
     def close_to_login(self):
         self.destroy()
@@ -1376,7 +1642,15 @@ class UserRegistrationWindow(tk.Toplevel):
             messagebox.showwarning(T("User Email"), T("Please enter your email address."))
             return
 
+        if not is_admin_registration_allowed(user_name, user_email):
+            messagebox.showwarning(T("User Registration"), T("Registration is only available for Admin/Admin."))
+            return
+
         profile = user_registeration(user_name, user_email)
+        if not profile.get("name") or not profile.get("email"):
+            messagebox.showwarning(T("User Registration"), T("Registration is only available for Admin/Admin."))
+            return
+
         if self.master is not None and hasattr(self.master, "user_name_var"):
             self.master.user_name_var.set(profile.get("name", ""))
         if self.master is not None and hasattr(self.master, "user_email_var"):
@@ -3176,6 +3450,7 @@ class ProgressApp(tk.Tk):
         super().__init__()
         global _ACTIVE_PROGRESS_APP
         _ACTIVE_PROGRESS_APP = self
+        self.read_only_mode = is_guest_profile(CURRENT_SESSION_PROFILE)
         self.title(T("Client Progress Manager"))
 
         if APP_ICON.exists():
@@ -3328,6 +3603,9 @@ class ProgressApp(tk.Tk):
         home_button = ttk.Button(header_actions, text=T("Home"), command=self.go_home, style="Action.TButton", width=10)
         home_button.pack(side="left", padx=(6, 0))
         self.translatable_buttons.append((home_button, "Home"))
+        logout_button = ttk.Button(header_actions, text=T("Logout"), command=self.logout_from_overview, style="Action.TButton", width=12)
+        logout_button.pack(side="left", padx=(6, 0))
+        self.translatable_buttons.append((logout_button, "Logout"))
         cancel_button = ttk.Button(header_actions, text=T("Cancel"), command=self.cancel_and_exit, style="Action.TButton", width=12)
         cancel_button.pack(side="left", padx=(6, 0))
         self.translatable_buttons.append((cancel_button, "Cancel"))
@@ -3417,6 +3695,7 @@ class ProgressApp(tk.Tk):
         client_actions_frame.grid(row=0, column=0, rowspan=2, sticky="ns", padx=(10, 6), pady=(8, 8))
         client_actions_frame.grid_columnconfigure(0, weight=1)
 
+        self.read_only_action_buttons = []
         client_action_specs = [
             (T("Add Client"), self.add_new_client, 18),
             (T("Save Client"), self.save_current_client, 18),
@@ -3434,6 +3713,7 @@ class ProgressApp(tk.Tk):
             )
             button.grid(row=idx, column=0, sticky="ew", padx=(8, 8), pady=(6, 0))
             self.translatable_buttons.append((button, text))
+            self.read_only_action_buttons.append(button)
 
         self.review_text = tk.Text(review_frame, width=30, height=4, wrap="word", font=("Segoe UI", 9))
         self.review_text.grid(row=0, column=1, sticky="nsew", padx=(0, 10), pady=(8, 6))
@@ -3462,6 +3742,7 @@ class ProgressApp(tk.Tk):
             )
             button.grid(row=row, column=col, sticky="ew", padx=(0, 8), pady=(0, 6))
             self.translatable_buttons.append((button, text))
+            self.read_only_action_buttons.append(button)
 
         self.progress_box = ttk.LabelFrame(main, text=T("Progress Overview"), style="Section.TLabelframe")
         self.translatable_labels.append((self.progress_box, "Progress Overview"))
@@ -3581,11 +3862,56 @@ class ProgressApp(tk.Tk):
             button.grid(row=row, column=column, sticky="ew", padx=(0, 4), pady=(0, 4))
             button.configure(width=max(18, len(text) + 4))
             self.translatable_buttons.append((button, text))
+            self.read_only_action_buttons.append(button)
 
         main.rowconfigure(4, weight=2)
         tasks_frame.rowconfigure(1, weight=1)
 
         self.clear_client_form()
+        self.apply_access_mode()
+
+    def _guest_allowed_button_texts(self):
+        return {
+            T("All Clients"),
+            T("Tasks Details"),
+            T("Export Clients Log"),
+            T("Export Task Log"),
+            T("Export Review Log"),
+            T("Open Review Log"),
+        }
+
+    def apply_access_mode(self):
+        self.read_only_mode = is_guest_profile(CURRENT_SESSION_PROFILE)
+        read_only = self.read_only_mode
+        guest_allowed = self._guest_allowed_button_texts()
+
+        for widget in (
+            self.client_combo,
+            self.country_combo,
+            self.contact_entry,
+            self.email_entry,
+            self.business_entry,
+            self.shop_number_entry,
+            self.address_entry,
+            self.electrical_meter_entry,
+        ):
+            if widget is None or not widget.winfo_exists():
+                continue
+            widget.configure(state="readonly" if read_only and hasattr(widget, "configure") else "normal")
+
+        if self.review_text is not None and self.review_text.winfo_exists():
+            self.review_text.configure(state="disabled" if read_only else "normal")
+
+        for button in getattr(self, "read_only_action_buttons", []):
+            if button is None or not button.winfo_exists():
+                continue
+            button_label = button.cget("text")
+            if read_only and button_label not in guest_allowed:
+                button.configure(state="disabled")
+            else:
+                button.configure(state="normal")
+
+        self.refresh_client_combo()
 
     def switch_language(self, event=None):
         selected = self.language_var.get()
@@ -3666,6 +3992,11 @@ class ProgressApp(tk.Tk):
 
     def go_home(self):
         self.destroy()
+        open_welcome_home()
+
+    def logout_from_overview(self):
+        set_current_session_profile(user_name="", user_email="")
+        self.close_overview_window()
         open_welcome_home()
 
     def focus_section(self, section_name):
@@ -3761,7 +4092,15 @@ class ProgressApp(tk.Tk):
         self.clear_client_form()
         messagebox.showinfo(T("Client deleted"), T("'{client_name}' was removed successfully.", client_name=name))
 
+    def _require_registered_user_for_changes(self, action_label="This action"):
+        if is_guest_profile(CURRENT_SESSION_PROFILE):
+            messagebox.showwarning(T("Access Denied"), T("Guest users are in read-only mode. {action_label} is not allowed.", action_label=action_label))
+            return True
+        return False
+
     def create_plan(self):
+        if self._require_registered_user_for_changes(T("Create client plan")):
+            return
         name = self.client_name_var.get().strip()
         if not name:
             messagebox.showwarning(T("Missing client"), T("Please enter a client name."))
@@ -3815,6 +4154,12 @@ class ProgressApp(tk.Tk):
         self.refresh_display()
 
     def open_task_details_window(self):
+        if is_guest_profile(CURRENT_SESSION_PROFILE):
+            if self.plan is None:
+                messagebox.showwarning(T("No client plan"), T("Create a client plan first."))
+                return
+        elif self._require_registered_user_for_changes(T("Task details")):
+            return
         if self.plan is None:
             messagebox.showwarning(T("No client plan"), T("Create a client plan first."))
             return
@@ -3828,18 +4173,21 @@ class ProgressApp(tk.Tk):
         )
 
     def open_contract_details_window(self):
-        if not is_registered_user_profile():
+        if not is_registered_user_profile() or is_guest_profile(CURRENT_SESSION_PROFILE):
             messagebox.showwarning(T("Access Denied"), T("Registered users only. Guest access is limited to clients, reviews, tasks and payment reports."))
             return
         ContractDetailsWindow(self)
 
     def open_transactions_window(self):
-        if not is_registered_user_profile():
+        if not is_registered_user_profile() or is_guest_profile(CURRENT_SESSION_PROFILE):
             messagebox.showwarning(T("Access Denied"), T("Registered users only. Guest access is limited to clients, reviews, tasks and payment reports."))
             return
         ClientTransactionsWindow(self, self.client_name_var.get().strip())
 
     def open_payment_report_window(self):
+        if is_guest_profile(CURRENT_SESSION_PROFILE):
+            messagebox.showwarning(T("Access Denied"), T("Guest users cannot open payment reports. Overview is read-only."))
+            return
         ClientPaymentReportWindow(self, self.client_name_var.get().strip())
 
     def focus_client_name_field(self):
@@ -3853,6 +4201,8 @@ class ProgressApp(tk.Tk):
         return False
 
     def add_task(self):
+        if self._require_registered_user_for_changes(T("Add task")):
+            return
         name = self.client_name_var.get().strip()
         if not name or name == T("<New Client>"):
             self.focus_client_name_field()
@@ -3867,6 +4217,8 @@ class ProgressApp(tk.Tk):
         self.open_task_details_window()
 
     def save_task(self):
+        if self._require_registered_user_for_changes(T("Save task")):
+            return
         name = self.client_name_var.get().strip()
         if not name or name == T("<New Client>"):
             self.focus_client_name_field()
@@ -3895,6 +4247,8 @@ class ProgressApp(tk.Tk):
         self.new_task_entry.icursor(0)
 
     def complete_selected_task(self):
+        if self._require_registered_user_for_changes(T("Complete task")):
+            return
         if self.plan is None:
             return
 
@@ -4028,6 +4382,8 @@ class ProgressApp(tk.Tk):
         self.refresh_display()
 
     def add_new_client(self):
+        if self._require_registered_user_for_changes(T("Add client")):
+            return
         self.clear_client_form()
         self.client_name_var.set(T("<New Client>"))
         if self.client_combo is not None and self.client_combo.winfo_exists():
@@ -4043,6 +4399,8 @@ class ProgressApp(tk.Tk):
             self.electrical_meter_var.set(str(meter_value))
 
     def save_current_client(self):
+        if self._require_registered_user_for_changes(T("Save client")):
+            return
         self.client_manager.load_clients()
         name = self.client_name_var.get().strip()
         if not name or name == T("<New Client>"):
@@ -4197,6 +4555,8 @@ class ProgressApp(tk.Tk):
         self.confirm_exit_app()
 
     def add_client_review(self):
+        if self._require_registered_user_for_changes(T("Add review")):
+            return
         name = self.client_name_var.get().strip()
         if not name or name == T("<New Client>"):
             self.focus_client_name_field()
@@ -4207,6 +4567,8 @@ class ProgressApp(tk.Tk):
         self.review_text.mark_set("insert", "1.0")
 
     def save_client_review(self):
+        if self._require_registered_user_for_changes(T("Save review")):
+            return
         name = self.client_name_var.get().strip()
         if not name or name == T("<New Client>"):
             self.focus_client_name_field()

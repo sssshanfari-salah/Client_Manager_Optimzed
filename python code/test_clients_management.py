@@ -31,6 +31,7 @@ from clients_progress_ui import (
     load_shop_electrical_meter_map,
     parse_task_items,
     resolve_log_output_dir,
+    save_guest_profile,
     set_language,
     strip_task_number_prefix,
     user_registeration,
@@ -168,6 +169,35 @@ class ClientManagerTests(unittest.TestCase):
         finally:
             ui.USERS_FILE = original_users_file
             ui.LEGACY_USER_PROFILE_FILE = original_legacy_file
+
+    def test_guest_profile_is_saved_to_permanent_guest_file(self):
+        import clients_progress_ui as ui
+
+        temp_dir = Path(self.temp_dir.name)
+        guests_path = temp_dir / "guests.json"
+        original_guests_file = getattr(ui, "GUESTS_FILE", None)
+        ui.GUESTS_FILE = guests_path
+
+        try:
+            profile = save_guest_profile("Guest", "Guest")
+            self.assertEqual(profile["name"], "Guest")
+            self.assertEqual(profile["email"], "Guest")
+            self.assertTrue(guests_path.exists())
+            payload = json.loads(guests_path.read_text(encoding="utf-8"))
+            self.assertIn("guests", payload)
+            self.assertEqual(payload["guests"][0]["name"], "Guest")
+            self.assertEqual(payload["guests"][0]["email"], "Guest")
+        finally:
+            if original_guests_file is not None:
+                ui.GUESTS_FILE = original_guests_file
+
+    def test_guest_login_credentials_are_detected_for_read_only_mode(self):
+        import clients_progress_ui as ui
+
+        self.assertTrue(ui.is_guest_login_credentials("Guest", "Guest"))
+        self.assertTrue(ui.is_guest_login_credentials("guest", "guest"))
+        self.assertFalse(ui.is_guest_login_credentials("Guest", "alice@example.com"))
+        self.assertFalse(ui.is_guest_login_credentials("Alice", "Guest"))
 
     def test_client_persistence_saves_permanent_project_files(self):
         temp_dir = Path(self.temp_dir.name)

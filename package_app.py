@@ -17,8 +17,10 @@ DIST_DIR = APP_DIR / "dist"
 BUILD_DIR = APP_DIR / "build"
 APP_NAME = "clients_manager"
 APP_DISPLAY_NAME = "Clients Manager"
+APP_SHORTCUT_NAME = "Clients Manager"
+APP_EXECUTABLE_NAME = APP_NAME
 DEFAULT_COUNTRY_CODE = "+968"
-SPEC_FILE = APP_DIR / f"{APP_NAME}.spec"
+SPEC_FILE = APP_DIR / f"{APP_EXECUTABLE_NAME}.spec"
 
 APP_MODULE_FILES = [
     SOURCE_DIR / "main.py",
@@ -48,6 +50,11 @@ APP_MODULE_FILES = [
 
 # Find the best available icon file for the built Windows desktop app.
 def resolve_target_icon():
+    icon_dirs = [
+        APP_DIR,
+        SOURCE_DIR,
+        APP_DIR / "starco icon",
+    ]
     candidates = [
         APP_DIR / "starco_icon.ico",
         SOURCE_DIR / "starco_icon.ico",
@@ -55,9 +62,18 @@ def resolve_target_icon():
         APP_DIR / "starco icon" / "icon.ico",
         APP_DIR / "starco icon" / "app_icon.ico",
     ]
+
     for candidate in candidates:
         if candidate.exists():
             return candidate
+
+    for icon_dir in icon_dirs:
+        if not icon_dir.exists():
+            continue
+        for candidate in sorted(icon_dir.iterdir()):
+            if candidate.is_file() and candidate.suffix.lower() in {".ico", ".png", ".jpg", ".jpeg"}:
+                return candidate
+
     return APP_DIR / "starco_icon.ico"
 
 
@@ -66,6 +82,8 @@ COUNTRY_CODES_DATA = SOURCE_DIR / "country_codes.json"
 SHOPS_ELECTRICAL_METERS_FILE = SOURCE_DIR / "Shops_Elect_meters.json"
 CLIENTS_DATA_FILE = APP_DIR / "clients.json"
 USERS_DATA_FILE = APP_DIR / "users.json"
+GUESTS_DATA_FILE = APP_DIR / "guests.json"
+LEGACY_USER_PROFILE_FILE = APP_DIR / "user_profile.json"
 CLIENTS_TASKS_DATA_FILE = APP_DIR / "clients_tasks.json"
 CLIENTS_REVIEWS_DATA_FILE = APP_DIR / "clients_reviews.json"
 LEGACY_CLIENTS_DATA_FILE = SOURCE_DIR / "clients.json"
@@ -93,6 +111,8 @@ RUNTIME_DATA_FILES = [
     TARGET_ICON,
     CLIENTS_DATA_FILE,
     USERS_DATA_FILE,
+    GUESTS_DATA_FILE,
+    LEGACY_USER_PROFILE_FILE,
     CLIENTS_TASKS_DATA_FILE,
     CLIENTS_REVIEWS_DATA_FILE,
     COUNTRY_CODES_DATA,
@@ -114,6 +134,8 @@ def validate_runtime_asset_catalog():
         SOURCE_DIR / "ui_actions",
         CLIENTS_DATA_FILE,
         USERS_DATA_FILE,
+        GUESTS_DATA_FILE,
+        LEGACY_USER_PROFILE_FILE,
         CLIENTS_TASKS_DATA_FILE,
         CLIENTS_REVIEWS_DATA_FILE,
         LEGACY_CLIENTS_DATA_FILE,
@@ -121,9 +143,10 @@ def validate_runtime_asset_catalog():
         SHOPS_ELECTRICAL_METERS_FILE,
         DOCUMENTS_DATA_FILE,
         SUPPORTING_DOCUMENTS_DIR,
-        TARGET_ICON,
         *REQUIRED_RUNTIME_DIRECTORIES,
     ]
+    if TARGET_ICON.exists():
+        required_paths.append(TARGET_ICON)
 
     missing_paths = [str(path) for path in required_paths if path is not None and not path.exists()]
     if missing_paths:
@@ -606,6 +629,8 @@ def remove_stale_artifacts():
 
 def find_built_exe():
     candidates = [
+        DIST_DIR / f"{APP_EXECUTABLE_NAME}.exe",
+        DIST_DIR / APP_EXECUTABLE_NAME / f"{APP_EXECUTABLE_NAME}.exe",
         DIST_DIR / f"{APP_NAME}.exe",
         DIST_DIR / APP_NAME / f"{APP_NAME}.exe",
         DIST_DIR / f"{APP_DISPLAY_NAME}.exe",
@@ -701,6 +726,12 @@ def ensure_runtime_files():
 
     if not USERS_DATA_FILE.exists():
         USERS_DATA_FILE.write_text(json.dumps({"users": []}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    if not GUESTS_DATA_FILE.exists():
+        GUESTS_DATA_FILE.write_text(json.dumps({"guests": []}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    if not LEGACY_USER_PROFILE_FILE.exists():
+        LEGACY_USER_PROFILE_FILE.write_text(json.dumps({"name": "", "email": ""}, ensure_ascii=False, indent=2), encoding="utf-8")
 
     for project_data_file in (CLIENTS_TASKS_DATA_FILE, CLIENTS_REVIEWS_DATA_FILE):
         if not project_data_file.exists():
@@ -811,7 +842,7 @@ def create_shortcut():
         return None
 
     DESKTOP_DIR.mkdir(parents=True, exist_ok=True)
-    desktop_link = DESKTOP_DIR / f"{APP_DISPLAY_NAME}.lnk"
+    desktop_link = DESKTOP_DIR / f"{APP_SHORTCUT_NAME}.lnk"
 
     try:
         import win32com.client as win32com_client
@@ -825,6 +856,7 @@ def create_shortcut():
     shortcut.Targetpath = str(exe_path)
     shortcut.WorkingDirectory = str(exe_path.parent)
     shortcut.IconLocation = str(TARGET_ICON if TARGET_ICON.exists() else exe_path)
+    shortcut.Description = APP_DISPLAY_NAME
     shortcut.WindowStyle = 7
     shortcut.Arguments = ""
     shortcut.save()

@@ -1,3 +1,27 @@
 {
-  "users": []
+  "users": [
+    {
+      "user":"Salah",
+      "email":"sssshanfari@gmail.com"
+    },
+    {
+      "user":"Salah Salim Said",
+      "email":"sssshanfari@gmail.com"
+    },
+    {
+      "user":"salah salim said",
+      "email":"sssshanfari@gmail.com"
+    },
+    {"user":"salah",
+      "email":"sssshanfari@gmail.com"
+    },
+    {
+"user":"salah salim",
+      "email":"sssshanfari@gmail.com"
+    },
+    {
+      "user":"Khalid",
+      "email":"omanson@yahoo.com"
+    }
+  ]
 }
