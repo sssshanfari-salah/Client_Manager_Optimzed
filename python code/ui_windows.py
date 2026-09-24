@@ -7,7 +7,13 @@ while this module keeps the legacy import surface stable for older code paths.
 from ui_shared import APP_ICON, WelcomeWindow, build_startup_splash, open_overview_window, open_welcome_home, safe_main
 from ui_main_app import ProgressApp
 from ui_client_windows import AllClientsProgressWindow, ClientDetailsWindow
-from ui_task_windows import ClientPaymentReportWindow, ClientTransactionsWindow, ContractDetailsWindow, TaskDetailsWindow
+from ui_task_windows import (
+    ClientPaymentReportWindow,
+    ClientTransactionsWindow,
+    ContractDetailsWindow,
+    ReservationContractWindow,
+    TaskDetailsWindow,
+)
 from ui_report_windows import (
     ClientLogPreviewWindow,
     ClientReviewsLogWindow,
@@ -22,6 +28,7 @@ __all__ = [
     "ProgressApp",
     "TaskDetailsWindow",
     "ContractDetailsWindow",
+    "ReservationContractWindow",
     "ClientDetailsWindow",
     "AllClientsProgressWindow",
     "ClientLogPreviewWindow",

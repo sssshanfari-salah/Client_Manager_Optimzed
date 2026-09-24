@@ -24,6 +24,25 @@ class ContractDetailsWindow(tk.Toplevel, BaseWindow):
         self.configure_window(self)
 
 
+class ReservationContractWindow(tk.Toplevel, BaseWindow):
+    def __init__(self, master=None, client_name="", client_data=None):
+        tk.Toplevel.__init__(self, master)
+        BaseWindow.__init__(self, title="Reservation Contract", geometry="980x760")
+        self.configure_window(self)
+        self.client_name = client_name
+        self.client_data = client_data
+
+        try:
+            from ui_reservation_contract import ShopReservationForm
+        except ImportError:
+            return
+
+        form = ShopReservationForm(client_name=client_name, client_data=client_data)
+        form.transient(self)
+        form.grab_set()
+        self._contract_form = form
+
+
 class ClientPaymentReportWindow(tk.Toplevel, BaseWindow):
     def __init__(self, master=None, client_name=""):
         tk.Toplevel.__init__(self, master)
@@ -43,6 +62,7 @@ class ClientTransactionsWindow(tk.Toplevel, BaseWindow):
 __all__ = [
     "TaskDetailsWindow",
     "ContractDetailsWindow",
+    "ReservationContractWindow",
     "ClientPaymentReportWindow",
     "ClientTransactionsWindow",
 ]

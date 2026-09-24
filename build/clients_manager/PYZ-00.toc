@@ -1366,6 +1366,10 @@
   ('typing_extensions',
    'C:\\Users\\ssssh\\AppData\\Roaming\\Python\\Python314\\site-packages\\typing_extensions.py',
    'PYMODULE'),
+  ('ui_reservation_contract',
+   'C:\\Users\\ssssh\\OneDrive\\Documents\\Client_Manager_optimized\\python '
+   'code\\ui_reservation_contract.py',
+   'PYMODULE'),
   ('unittest',
    'c:\\Users\\ssssh\\OneDrive\\Documents\\Client_Manager_optimized\\.conda\\Lib\\unittest\\__init__.py',
    'PYMODULE'),

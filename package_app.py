@@ -26,6 +26,7 @@ APP_MODULE_FILES = [
     SOURCE_DIR / "main.py",
     SOURCE_DIR / "clients_management.py",
     SOURCE_DIR / "clients_progress_ui.py",
+    SOURCE_DIR / "ui_reservation_contract.py",
     SOURCE_DIR / "business_logic.py",
     SOURCE_DIR / "reporting.py",
     SOURCE_DIR / "data_access.py",
@@ -91,11 +92,13 @@ DOCUMENTS_DATA_FILE = SOURCE_DIR / "docs" / "documents.txt"
 SUPPORTING_DOCUMENTS_DIR = APP_DIR / "supporting_documents"
 STARCO_RENT_CONTRACT = SUPPORTING_DOCUMENTS_DIR / "starco_rent_contract_1.pdf"
 APPLICATION_OUTPUTS_DIR = APP_DIR / "application_outputs"
+CONTRACTS_OUTPUT_DIR = APPLICATION_OUTPUTS_DIR / "contracts"
+RESERVATION_CONTRACTS_INDEX_FILE = CONTRACTS_OUTPUT_DIR / "reservation_contracts.json"
 CLIENTS_ROOT_DIR = APP_DIR / "Clients"
 CLIENT_LOGS_DIR = APPLICATION_OUTPUTS_DIR / "clients_logs"
 TASK_LOGS_DIR = APPLICATION_OUTPUTS_DIR / "tasks_logs"
 OBSERVATION_LOGS_DIR = APPLICATION_OUTPUTS_DIR / "observation_logs"
-OUTPUT_LOG_DIRS = [APPLICATION_OUTPUTS_DIR, CLIENT_LOGS_DIR, TASK_LOGS_DIR, OBSERVATION_LOGS_DIR]
+OUTPUT_LOG_DIRS = [APPLICATION_OUTPUTS_DIR, CLIENT_LOGS_DIR, TASK_LOGS_DIR, OBSERVATION_LOGS_DIR, CONTRACTS_OUTPUT_DIR]
 PROJECT_RUNTIME_DIRECTORIES = [
     APP_DIR / "supporting_documents",
     APP_DIR / "starco icon",
@@ -119,6 +122,7 @@ ROOT_RUNTIME_FILES = [
     SHOPS_ELECTRICAL_METERS_FILE,
     DOCUMENTS_DATA_FILE,
     STARCO_RENT_CONTRACT,
+    RESERVATION_CONTRACTS_INDEX_FILE,
 ]
 RUNTIME_DATA_FILES = [
     *ROOT_RUNTIME_FILES,
@@ -153,6 +157,7 @@ def validate_runtime_asset_catalog():
 
     ui_files = [
         SOURCE_DIR / "clients_progress_ui.py",
+        SOURCE_DIR / "ui_reservation_contract.py",
         SOURCE_DIR / "ui_main_app.py",
         SOURCE_DIR / "ui_shared.py",
         SOURCE_DIR / "ui_windows.py",
@@ -205,6 +210,9 @@ def validate_runtime_asset_catalog():
         "Deposite not recieved",
         "_update_contract_status_option",
         "self.master_app.electrical_meter_var.set(client.electrical_meter)",
+        "ShopReservationForm",
+        "reservation_contracts.json",
+        "Rent Calculator",
     ]
     all_clients_layout_markers = [
         "build_all_clients_row_values",
@@ -786,6 +794,9 @@ def ensure_runtime_files():
     SOURCE_DIR.mkdir(parents=True, exist_ok=True)
     for output_dir in OUTPUT_LOG_DIRS:
         output_dir.mkdir(parents=True, exist_ok=True)
+
+    if not RESERVATION_CONTRACTS_INDEX_FILE.exists():
+        RESERVATION_CONTRACTS_INDEX_FILE.write_text("{}", encoding="utf-8")
 
     if not ENTRY_SCRIPT.exists():
         raise FileNotFoundError(f"Entry script not found: {ENTRY_SCRIPT}")

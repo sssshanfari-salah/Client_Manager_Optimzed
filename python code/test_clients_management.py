@@ -49,6 +49,30 @@ except ImportError:
 
 
 class ClientManagerTests(unittest.TestCase):
+    def test_reservation_contract_module_imports_without_auto_launching_ui(self):
+        module_path = Path(__file__).resolve().parent / "ui_reservation_contract.py"
+        spec = importlib.util.spec_from_file_location("reservation_contract_test_module", module_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertTrue(hasattr(module, "ShopReservationForm"))
+
+    def test_contract_form_saves_shop_keyed_contract_file_and_preview_path(self):
+        module_path = Path(__file__).resolve().parent / "ui_reservation_contract.py"
+        spec = importlib.util.spec_from_file_location("reservation_contract_preview_test_module", module_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        instance = object.__new__(module.ShopReservationForm)
+        _, output_dir, mapping_path = instance._get_contract_output_paths()
+        self.assertTrue(str(mapping_path).endswith("reservation_contracts.json"))
+        self.assertIn("application_outputs", str(output_dir))
+        self.assertTrue(hasattr(module.ShopReservationForm, "save_contract_document"))
+        self.assertTrue(hasattr(module.ShopReservationForm, "preview_saved_contract"))
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.file_path = os.path.join(self.temp_dir.name, "clients.json")
@@ -783,6 +807,41 @@ class ClientManagerTests(unittest.TestCase):
         icon_path = resolve_target_icon()
         self.assertTrue(icon_path.exists())
         self.assertIn("starco_icon.ico", icon_path.name)
+
+    def test_package_app_includes_reservation_contract_assets(self):
+        import package_app
+
+        self.assertIn("ui_reservation_contract.py", [path.name for path in package_app.APP_MODULE_FILES])
+        self.assertTrue(any("contracts" in str(path) for path in package_app.PROJECT_RUNTIME_DIRECTORIES))
+        self.assertIn("reservation_contracts.json", [path.name for path in package_app.ROOT_RUNTIME_FILES])
+
+    def test_ui_facade_exposes_reservation_contract_form(self):
+        from ui_shared import open_reservation_contract_form
+        from ui_task_windows import ReservationContractWindow
+        from ui_windows import ReservationContractWindow as FacadeReservationContractWindow
+
+        self.assertTrue(callable(open_reservation_contract_form))
+        self.assertTrue(hasattr(ReservationContractWindow, "__init__"))
+        self.assertTrue(hasattr(FacadeReservationContractWindow, "__init__"))
+
+    def test_project_main_can_launch_reservation_contract_form(self):
+        import main
+
+        self.assertTrue(callable(getattr(main, "main", None)))
+        self.assertTrue(hasattr(main, "launch_reservation_form"))
+
+    def test_rent_calculator_totals_saved_clients_and_remaining_shops(self):
+        import clients_progress_ui as ui
+
+        clients = [
+            Client("Ali", "+968900001", "Retail", contract_details={"rent_value": "1200"}),
+            Client("Sara", "+968900002", "Office", contract_details={"rent_value": "800"}),
+            Client("Nora", "+968900003", "Shop", shop_number="5", contract_details={"rent_value": "1500"}),
+        ]
+
+        self.assertAlmostEqual(ui.calculate_total_saved_client_rent(clients), 3500.0)
+        self.assertEqual(ui.calculate_remaining_shop_count({"1", "2", "5"}), 33)
+        self.assertAlmostEqual(ui.calculate_remaining_shop_rent({"1", "2", "5"}, per_shop_rent=200), 6600.0)
 
 
 if __name__ == "__main__":

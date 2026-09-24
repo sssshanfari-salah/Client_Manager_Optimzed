@@ -4,6 +4,7 @@ import calendar
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import webbrowser
@@ -500,6 +501,78 @@ def resolve_shop_electrical_meter(shop_number):
     if 1 <= shop_id <= 36:
         return str(mapping.get(str(shop_id), "")).strip()
     return ""
+
+
+def _coerce_currency_amount(value):
+    if value is None:
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    text = str(value).strip()
+    if not text:
+        return 0.0
+
+    normalized = text.replace(",", "").replace("OMR", "").replace("omr", "")
+    normalized = re.sub(r"[^0-9.\-]", "", normalized)
+    if not normalized or normalized in {"-", "."}:
+        return 0.0
+
+    try:
+        return float(normalized)
+    except ValueError:
+        return 0.0
+
+
+def calculate_total_saved_client_rent(clients=None):
+    if clients is None:
+        manager = ClientManager(resolve_clients_data_path())
+        manager.load_clients()
+        clients = manager.clients
+
+    total = 0.0
+    for client in clients:
+        if client is None:
+            continue
+
+        rent_value = ""
+        contract_details = getattr(client, "contract_details", {})
+        if isinstance(contract_details, dict):
+            for key in ("rent_value", "monthly_rent", "rent"):
+                value = contract_details.get(key)
+                if value not in (None, ""):
+                    rent_value = str(value)
+                    break
+
+        if not rent_value and isinstance(getattr(client, "reservation_status", None), dict):
+            for key in ("rent_value", "monthly_rent", "rent"):
+                value = client.reservation_status.get(key)
+                if value not in (None, ""):
+                    rent_value = str(value)
+                    break
+
+        total += _coerce_currency_amount(rent_value)
+
+    return total
+
+
+def calculate_remaining_shop_count(used_shop_numbers=None):
+    if used_shop_numbers is None:
+        manager = ClientManager(resolve_clients_data_path())
+        manager.load_clients()
+        used_shop_numbers = {str(getattr(client, "shop_number", "") or "").strip() for client in manager.clients}
+
+    reserved = set()
+    for value in used_shop_numbers or []:
+        shop_number = str(value or "").strip()
+        if shop_number:
+            reserved.add(shop_number)
+
+    return sum(1 for shop_number in range(1, 37) if str(shop_number) not in reserved)
+
+
+def calculate_remaining_shop_rent(used_shop_numbers=None, per_shop_rent=0.0):
+    return calculate_remaining_shop_count(used_shop_numbers) * _coerce_currency_amount(per_shop_rent)
 
 
 def load_country_codes():
@@ -1403,6 +1476,25 @@ class WelcomeWindow(tk.Tk):
         )
         self.transactions_button.grid(row=0, column=1, padx=(8, 12), pady=(20, 10), sticky="nsew")
 
+        self.rent_calculator_button = ttk.Button(
+            main_frame,
+            text="Rent Calculator",
+            command=self.open_rent_calculator_window,
+            style="Action.TButton",
+            width=22,
+        )
+        self.rent_calculator_button.grid(row=1, column=0, padx=(12, 8), pady=(6, 10), sticky="nsew")
+
+        self.contract_button = ttk.Button(
+            main_frame,
+            text="Reservation Contract",
+            command=self.open_reservation_contract_form,
+            style="Action.TButton",
+            width=22,
+            state="disabled",
+        )
+        self.contract_button.grid(row=1, column=1, padx=(8, 12), pady=(6, 10), sticky="nsew")
+
         self.transactions_hint = ttk.Label(
             main_frame,
             text=T("Open client payment records"),
@@ -1410,7 +1502,37 @@ class WelcomeWindow(tk.Tk):
             foreground="#374151",
             wraplength=150,
         )
-        self.transactions_hint.grid(row=1, column=1, sticky="n", padx=(8, 12), pady=(18, 0))
+        self.transactions_hint.grid(row=2, column=0, columnspan=2, sticky="n", padx=(8, 12), pady=(0, 0))
+
+        contract_frame = ttk.LabelFrame(main_frame, text="Saved Reservation Contracts", padding=(12, 10))
+        contract_frame.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=(12, 12), pady=(8, 0))
+        contract_frame.columnconfigure(0, weight=1)
+
+        search_row = ttk.Frame(contract_frame)
+        search_row.pack(fill="x", pady=(0, 8))
+        ttk.Label(search_row, text="Search").pack(side="left", padx=(0, 8))
+        self.saved_contract_search_var = tk.StringVar()
+        self.saved_contract_search_var.trace_add("write", self._refresh_saved_contract_list)
+        ttk.Entry(search_row, textvariable=self.saved_contract_search_var).pack(side="left", fill="x", expand=True)
+
+        self.saved_contract_listbox = tk.Listbox(
+            contract_frame,
+            height=6,
+            exportselection=False,
+            bg="#f8fafc",
+            relief="solid",
+            borderwidth=1,
+            font=("Segoe UI", 9),
+        )
+        self.saved_contract_listbox.pack(fill="both", expand=True)
+        self.saved_contract_lookup = {}
+
+        action_row = ttk.Frame(contract_frame)
+        action_row.pack(fill="x", pady=(8, 0))
+        ttk.Button(action_row, text="Preview", command=self.preview_selected_saved_contract).pack(side="left", padx=(0, 8))
+        ttk.Button(action_row, text="Print", command=self.print_selected_saved_contract).pack(side="left")
+
+        self._refresh_saved_contract_list()
         self.refresh_todo_list()
 
         footer = ttk.Frame(self, padding=(0, 0, 24, 18))
@@ -1426,6 +1548,99 @@ class WelcomeWindow(tk.Tk):
         self.login_status_var.set("")
         self.guest_mode = True
         self.destroy()
+
+    def _get_saved_contract_index_path(self):
+        return APP_ROOT / "application_outputs" / "contracts" / "reservation_contracts.json"
+
+    def _load_saved_contract_entries(self):
+        index_path = self._get_saved_contract_index_path()
+        if not index_path.exists():
+            return []
+
+        try:
+            with index_path.open("r", encoding="utf-8") as infile:
+                payload = json.load(infile)
+        except (json.JSONDecodeError, OSError, TypeError):
+            return []
+
+        if not isinstance(payload, dict):
+            return []
+
+        entries = []
+        for key, value in payload.items():
+            if not isinstance(value, str):
+                continue
+            contract_path = Path(value)
+            if contract_path.exists():
+                entries.append((str(key), str(contract_path)))
+        entries.sort(key=lambda item: item[0].lower())
+        return entries
+
+    def _refresh_saved_contract_list(self, *_args):
+        query = self.saved_contract_search_var.get().strip().lower()
+        entries = self._load_saved_contract_entries()
+        filtered = []
+        for key, path in entries:
+            if not query or query in key.lower() or query in Path(path).stem.lower():
+                filtered.append((key, path))
+
+        self.saved_contract_lookup = {}
+        self.saved_contract_listbox.delete(0, tk.END)
+        if not filtered:
+            self.saved_contract_listbox.insert(tk.END, "No saved contracts found")
+            return
+
+        for key, path in filtered:
+            label = f"{key} - {Path(path).name}"
+            self.saved_contract_lookup[label] = path
+            self.saved_contract_listbox.insert(tk.END, label)
+
+    def preview_selected_saved_contract(self):
+        if not self.saved_contract_listbox.curselection():
+            messagebox.showwarning("Preview", "Please select a saved contract first.")
+            return
+
+        selected_label = self.saved_contract_listbox.get(self.saved_contract_listbox.curselection()[0])
+        contract_path = self.saved_contract_lookup.get(selected_label)
+        if not contract_path or not Path(contract_path).exists():
+            messagebox.showwarning("Preview", "The selected contract file could not be found.")
+            return
+
+        try:
+            if hasattr(os, "startfile"):
+                os.startfile(contract_path)
+            elif os.name == "nt":
+                subprocess.Popen(["notepad.exe", contract_path])
+            else:
+                subprocess.Popen(["xdg-open", contract_path])
+        except Exception as exc:
+            messagebox.showerror("Preview", f"Unable to open contract: {exc}")
+
+    def print_selected_saved_contract(self):
+        if not self.saved_contract_listbox.curselection():
+            messagebox.showwarning("Print", "Please select a saved contract first.")
+            return
+
+        selected_label = self.saved_contract_listbox.get(self.saved_contract_listbox.curselection()[0])
+        contract_path = self.saved_contract_lookup.get(selected_label)
+        if not contract_path or not Path(contract_path).exists():
+            messagebox.showwarning("Print", "The selected contract file could not be found.")
+            return
+
+        try:
+            if hasattr(os, "startfile"):
+                os.startfile(contract_path, "print")
+            elif os.name == "nt":
+                subprocess.Popen(["notepad.exe", "/p", contract_path])
+            else:
+                subprocess.Popen(["xdg-open", contract_path])
+        except Exception as exc:
+            messagebox.showerror("Print", f"Unable to print contract: {exc}")
+
+    def open_rent_calculator_window(self):
+        calculator = RentCalculatorWindow(self)
+        calculator.grab_set()
+        calculator.wait_window()
 
     def open_login_window(self):
         login_window = LoginWindow(self)
@@ -1457,9 +1672,28 @@ class WelcomeWindow(tk.Tk):
         self.user_email_var.set(user_email)
         self._refresh_login_status()
 
+    def open_reservation_contract_form(self):
+        if not is_registered_user_profile():
+            messagebox.showwarning("Access Denied", "Registered users only can open the reservation contract form.")
+            return
+
+        try:
+            from ui_reservation_contract import ShopReservationForm
+        except ImportError:
+            messagebox.showerror("Form unavailable", "The reservation contract form could not be loaded.")
+            return
+
+        form = ShopReservationForm()
+        form.grab_set()
+        form.wait_window()
+
     def _sync_overview_access(self):
         if hasattr(self, "overview_button"):
             self.overview_button.configure(
+                state="normal" if is_registered_user_profile() else "disabled"
+            )
+        if hasattr(self, "contract_button"):
+            self.contract_button.configure(
                 state="normal" if is_registered_user_profile() else "disabled"
             )
 
@@ -1598,6 +1832,66 @@ class WelcomeWindow(tk.Tk):
         self.user_email_var.set(user_email)
         self._refresh_login_status()
         messagebox.showinfo(T("User Profile"), T("User profile confirmed successfully."))
+
+
+class RentCalculatorWindow(tk.Toplevel):
+    def __init__(self, master=None):
+        super().__init__(master)
+        self.title("Rent Calculator")
+        self.geometry("430x300")
+        self.minsize(380, 260)
+        self.configure(bg="#f8fafc")
+
+        container = ttk.Frame(self, padding=18)
+        container.pack(fill="both", expand=True)
+
+        ttk.Label(container, text="Rent Calculator", font=("Segoe UI", 16, "bold")).pack(anchor="w", pady=(0, 10))
+
+        ttk.Label(container, text="Rent per remaining shop (OMR)", anchor="w").pack(anchor="w", pady=(0, 4))
+        self.per_shop_rent_var = tk.StringVar(value="0")
+        ttk.Entry(container, textvariable=self.per_shop_rent_var, width=26).pack(fill="x", pady=(0, 12))
+
+        ttk.Button(container, text="Calculate", command=self.calculate).pack(anchor="w", pady=(0, 12))
+
+        ttk.Label(container, text="Total rent from all saved clients", anchor="w").pack(anchor="w")
+        self.total_rent_var = tk.StringVar(value="0.00")
+        ttk.Label(container, textvariable=self.total_rent_var, font=("Segoe UI", 11, "bold"), foreground="#0f172a").pack(anchor="w", pady=(0, 8))
+
+        ttk.Label(container, text="Remaining shops available", anchor="w").pack(anchor="w")
+        self.remaining_shop_var = tk.StringVar(value="0")
+        ttk.Label(container, textvariable=self.remaining_shop_var, font=("Segoe UI", 11, "bold"), foreground="#0f172a").pack(anchor="w", pady=(0, 4))
+
+        ttk.Label(container, text="Total rent for remaining shops", anchor="w").pack(anchor="w")
+        self.remaining_rent_var = tk.StringVar(value="0.00")
+        ttk.Label(container, textvariable=self.remaining_rent_var, font=("Segoe UI", 11, "bold"), foreground="#0f172a").pack(anchor="w")
+
+        ttk.Button(container, text="Close", command=self.destroy).pack(anchor="e", pady=(16, 0))
+        self.calculate()
+
+    def _load_clients(self):
+        manager = ClientManager(resolve_clients_data_path())
+        manager.load_clients()
+        return manager.clients
+
+    def _load_used_shop_numbers(self):
+        used = set()
+        for client in self._load_clients():
+            shop_number = str(getattr(client, "shop_number", "") or "").strip()
+            if shop_number:
+                used.add(shop_number)
+        return used
+
+    def calculate(self):
+        clients = self._load_clients()
+        total_saved = calculate_total_saved_client_rent(clients)
+        used_shops = self._load_used_shop_numbers()
+        remaining = calculate_remaining_shop_count(used_shops)
+        per_shop_rent = _coerce_currency_amount(self.per_shop_rent_var.get())
+        remaining_rent = calculate_remaining_shop_rent(used_shops, per_shop_rent)
+
+        self.total_rent_var.set(f"{total_saved:.2f} OMR")
+        self.remaining_shop_var.set(f"{remaining} shops")
+        self.remaining_rent_var.set(f"{remaining_rent:.2f} OMR")
 
 
 class LoginWindow(tk.Toplevel):

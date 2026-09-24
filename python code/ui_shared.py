@@ -63,6 +63,11 @@ def safe_main():
     return canonical_safe_main()
 
 
+def open_reservation_contract_form(client_name=None, client_data=None):
+    from ui_reservation_contract import ShopReservationForm
+    return ShopReservationForm(client_name=client_name, client_data=client_data)
+
+
 __all__ = [
     "APP_ICON",
     "BaseWindow",
@@ -71,5 +76,6 @@ __all__ = [
     "build_startup_splash",
     "open_overview_window",
     "open_welcome_home",
+    "open_reservation_contract_form",
     "safe_main",
 ]
