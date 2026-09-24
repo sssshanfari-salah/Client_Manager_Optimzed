@@ -60,6 +60,43 @@ def normalize_transaction_entry(value):
     return normalized
 
 
+# Normalise reservation-status records used for preliminary client bookings.
+def normalize_reservation_status(value):
+    reservation_fields = {
+        "client_name": "",
+        "contact": "",
+        "shop_number": "",
+        "deposit_status": "Deposite not recieved",
+        "contract_status": "under progress",
+    }
+
+    if not isinstance(value, dict):
+        return dict(reservation_fields)
+
+    normalized = {}
+    for key, default in reservation_fields.items():
+        raw_value = value.get(key, default)
+        if raw_value is None:
+            raw_value = default
+        normalized[key] = str(raw_value)
+
+    deposit_status = normalized.get("deposit_status", "Deposite not recieved").strip()
+    if deposit_status.lower() in {"deposite recieved", "deposit received", "received", "paid"}:
+        normalized["deposit_status"] = "Deposite recieved"
+    else:
+        normalized["deposit_status"] = "Deposite not recieved"
+
+    status = normalized["contract_status"].strip().lower()
+    if normalized["deposit_status"].lower() == "deposite recieved" and status in {"completed", "complete", "done"}:
+        normalized["contract_status"] = "completed"
+    elif normalized["deposit_status"].lower() == "deposite recieved":
+        normalized["contract_status"] = "completed"
+    else:
+        normalized["contract_status"] = "under progress"
+
+    return normalized
+
+
 # Generate the list of contract months between start and end dates for reporting and follow-up tasks.
 def generate_contract_months(start_date=None, end_date=None):
     start_value = str(start_date or "").strip()
@@ -263,7 +300,7 @@ def format_contact_number(value: str, country_code: str = DEFAULT_CONTACT_COUNTR
 
 # Single client record used throughout the app for identity, contact, review, and contract data.
 class Client:
-    def __init__(self, name: str, contact: str, business: str, email: str = "", shop_number: str = "", reviews=None, contract_details=None, progress=None, transactions=None, address: str = "", electrical_meter: str = "", notes: str = ""):
+    def __init__(self, name: str, contact: str, business: str, email: str = "", shop_number: str = "", reviews=None, contract_details=None, progress=None, transactions=None, address: str = "", electrical_meter: str = "", notes: str = "", reservation_status=None):
         self.name = name
         self.contact = format_contact_number(contact, DEFAULT_CONTACT_COUNTRY_CODE)
         self.business = business
@@ -276,6 +313,7 @@ class Client:
         self.reviews = []
         self.contract_details = normalize_contract_details(contract_details)
         self.progress = normalize_client_progress(progress)
+        self.reservation_status = normalize_reservation_status(reservation_status)
         self.transactions = []
 
         if reviews is not None:
@@ -307,6 +345,7 @@ class Client:
             "reviews": list(self.reviews),
             "contract_details": dict(self.contract_details),
             "progress": dict(self.progress),
+            "reservation_status": dict(self.reservation_status),
             "transactions": [dict(entry) for entry in self.transactions],
         }
 
@@ -369,6 +408,11 @@ class Client:
         progress = pick("progress", default={})
         if not isinstance(progress, dict):
             progress = {}
+        reservation_status = pick("reservation_status", "reservationStatus", "Reservation Status", default={})
+        if not isinstance(reservation_status, dict):
+            reservation_status = {}
+        if "deposit_status" not in reservation_status:
+            reservation_status["deposit_status"] = "Deposite not recieved"
         transactions = pick("transactions", default=[])
         if not isinstance(transactions, list):
             transactions = []
@@ -386,6 +430,7 @@ class Client:
             address=str(address),
             electrical_meter=str(electrical_meter),
             notes=str(notes),
+            reservation_status=reservation_status,
         )
 
     def __repr__(self):

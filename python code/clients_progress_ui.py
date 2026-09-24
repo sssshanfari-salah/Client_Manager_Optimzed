@@ -252,20 +252,38 @@ def is_guest_login_credentials(user_name, email_account):
     return name == "guest" and email == "guest"
 
 
-def set_current_session_profile(profile=None, user_name=None, user_email=None):
-    if profile is not None:
+def sync_session_profile(profile=None, user_name=None, user_email=None, *, clear=False):
+    if clear:
+        CURRENT_SESSION_PROFILE["name"] = ""
+        CURRENT_SESSION_PROFILE["email"] = ""
+        return CURRENT_SESSION_PROFILE
+
+    if isinstance(profile, dict):
         CURRENT_SESSION_PROFILE["name"] = str(profile.get("name") or "").strip()
         CURRENT_SESSION_PROFILE["email"] = str(profile.get("email") or "").strip()
         return CURRENT_SESSION_PROFILE
+
+    if isinstance(profile, str):
+        if user_name is not None and user_email is None:
+            user_email = user_name
+        user_name = profile
+        user_email = user_email or ""
 
     CURRENT_SESSION_PROFILE["name"] = str(user_name or "").strip()
     CURRENT_SESSION_PROFILE["email"] = str(user_email or "").strip()
     return CURRENT_SESSION_PROFILE
 
 
+def set_current_session_profile(profile=None, user_name=None, user_email=None):
+    return sync_session_profile(profile=profile, user_name=user_name, user_email=user_email)
+
+
 def is_registered_user_profile(profile=None):
     if profile is None:
-        profile = load_user_profile()
+        profile = CURRENT_SESSION_PROFILE
+
+    if not isinstance(profile, dict):
+        profile = {"name": "", "email": ""}
 
     user_name = str(profile.get("name") or "").strip()
     user_email = str(profile.get("email") or "").strip()
@@ -275,7 +293,9 @@ def is_registered_user_profile(profile=None):
 
 
 def build_report_issuer_footer():
-    profile = load_user_profile()
+    profile = CURRENT_SESSION_PROFILE.copy()
+    if not profile.get("name") and not profile.get("email"):
+        profile = load_user_profile()
     if not is_registered_user_profile(profile):
         user_name = "Guest"
     else:
@@ -346,6 +366,25 @@ def apply_bidi_text(value):
         return text
 
     return get_display(arabic_reshaper.reshape(text))
+
+
+def build_all_clients_row_values(client, progress_info=None):
+    if progress_info is None:
+        progress_info = {}
+
+    progress = progress_info.get("progress", 0)
+    pending_tasks = progress_info.get("pending_tasks", [])
+    all_tasks = progress_info.get("all_tasks", [])
+
+    return (
+        client.name,
+        getattr(client, "contact", ""),
+        client.business,
+        getattr(client, "shop_number", ""),
+        getattr(client, "electrical_meter", getattr(client, "notes", "")),
+        f"{progress}%",
+        f"{len(pending_tasks)} / {len(all_tasks)}",
+    )
 
 
 def set_emoji_translated_label(widget, original_text, emoji_prefix=""):
@@ -1182,8 +1221,9 @@ class WelcomeWindow(tk.Tk):
         self.minsize(620, 420)
         self.configure(bg="#eef2ff")
 
-        self.user_name_var = tk.StringVar(value="")
-        self.user_email_var = tk.StringVar(value="")
+        current_profile = CURRENT_SESSION_PROFILE.copy()
+        self.user_name_var = tk.StringVar(value=current_profile.get("name", ""))
+        self.user_email_var = tk.StringVar(value=current_profile.get("email", ""))
         self.login_status_var = tk.StringVar(value="")
         self.guest_mode = True
 
@@ -1273,19 +1313,15 @@ class WelcomeWindow(tk.Tk):
         main_frame.rowconfigure(0, weight=0)
         main_frame.rowconfigure(1, weight=1)
 
-        buttons = [
-            (T("Overview"), self._open_progress_panel),
-        ]
-
-        for index, (label_text, command) in enumerate(buttons):
-            button = ttk.Button(
-                main_frame,
-                text=label_text,
-                command=command,
-                style="Action.TButton",
-                width=22,
-            )
-            button.grid(row=0, column=0, padx=(12, 8), pady=(20, 10), sticky="nsew")
+        self.overview_button = ttk.Button(
+            main_frame,
+            text=T("Overview"),
+            command=self._open_progress_panel,
+            style="Action.TButton",
+            width=22,
+            state="disabled",
+        )
+        self.overview_button.grid(row=0, column=0, padx=(12, 8), pady=(20, 10), sticky="nsew")
 
         self.transactions_button = ttk.Button(
             main_frame,
@@ -1313,6 +1349,7 @@ class WelcomeWindow(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self.exit_app)
 
     def exit_app(self):
+        sync_session_profile(clear=True)
         self.user_name_var.set("")
         self.user_email_var.set("")
         self.login_status_var.set("")
@@ -1338,6 +1375,7 @@ class WelcomeWindow(tk.Tk):
 
     def use_guest_profile(self):
         profile = save_guest_profile("Guest", "Guest")
+        sync_session_profile(user_name=profile["name"], user_email=profile["email"])
         self.user_name_var.set(profile["name"])
         self.user_email_var.set(profile["email"])
         self._refresh_login_status()
@@ -1348,23 +1386,36 @@ class WelcomeWindow(tk.Tk):
         self.user_email_var.set(user_email)
         self._refresh_login_status()
 
-    def _refresh_login_status(self):
-        profile = {
-            "name": self.user_name_var.get().strip(),
-            "email": self.user_email_var.get().strip(),
-        }
-        if is_registered_user_profile(profile):
-            self.guest_mode = False
-            self.login_status_var.set(T("Logged in as {user_name}", user_name=profile["name"]))
-            return
+    def _sync_overview_access(self):
+        if hasattr(self, "overview_button"):
+            self.overview_button.configure(
+                state="normal" if is_registered_user_profile() else "disabled"
+            )
 
+    def _refresh_login_status(self):
+        session_name = CURRENT_SESSION_PROFILE.get("name", "").strip()
+        session_email = CURRENT_SESSION_PROFILE.get("email", "").strip()
+        profile = {
+            "name": (self.user_name_var.get().strip() or session_name),
+            "email": (self.user_email_var.get().strip() or session_email),
+        }
         if profile["name"] or profile["email"]:
+            self.user_name_var.set(profile["name"])
+            self.user_email_var.set(profile["email"])
+            if is_registered_user_profile(profile):
+                self.guest_mode = False
+                self.login_status_var.set(T("Logged in as {user_name}", user_name=profile["name"]))
+                self._sync_overview_access()
+                return
+
             self.guest_mode = True
             self.login_status_var.set("Guest user selected")
+            self._sync_overview_access()
             return
 
         self.guest_mode = True
         self.login_status_var.set("")
+        self._sync_overview_access()
 
     def login_user(self):
         user_name = self.user_name_var.get().strip()
@@ -1417,6 +1468,7 @@ class WelcomeWindow(tk.Tk):
         welcome.mainloop()
 
     def logout_user(self):
+        sync_session_profile(clear=True)
         self.user_name_var.set("")
         self.user_email_var.set("")
         self.guest_mode = True
@@ -3741,6 +3793,7 @@ class ProgressApp(tk.Tk):
             (T("Add Client"), self.add_new_client, 18),
             (T("Save Client"), self.save_current_client, 18),
             (T("All Clients"), self.open_all_clients, 18),
+            (T("Reservation Status"), self.open_reservation_status_window, 20),
             (T("Export Clients Log"), self.export_client_log, None),
         ]
 
@@ -4036,7 +4089,7 @@ class ProgressApp(tk.Tk):
         open_welcome_home()
 
     def logout_from_overview(self):
-        set_current_session_profile(user_name="", user_email="")
+        sync_session_profile(clear=True)
         self.close_overview_window()
         open_welcome_home()
 
@@ -4654,6 +4707,12 @@ class ProgressApp(tk.Tk):
     def open_all_clients(self):
         AllClientsProgressWindow(self)
 
+    def open_reservation_status_window(self):
+        if not is_registered_user_profile() or is_guest_profile(CURRENT_SESSION_PROFILE):
+            messagebox.showwarning(T("Access Denied"), T("Registered users only. Guest access is limited to clients, reviews, tasks and payment reports."))
+            return
+        ReservationStatusWindow(self)
+
 
 class ClientDetailsWindow(tk.Toplevel):
     def __init__(self, master=None, client_name=None, master_manager=None):
@@ -4847,6 +4906,211 @@ class ClientDetailsWindow(tk.Toplevel):
         self.destroy()
 
 
+class ReservationStatusWindow(tk.Toplevel):
+    def __init__(self, master=None):
+        super().__init__(master)
+        self.title(T("Reservation Status"))
+        self.geometry("500x360")
+        self.minsize(420, 300)
+        self.master_app = master
+        self.manager = getattr(master, "client_manager", ClientManager("clients.json")) if master is not None else ClientManager("clients.json")
+
+        main = ttk.Frame(self, padding=16)
+        main.pack(fill="both", expand=True)
+        main.columnconfigure(1, weight=1)
+
+        self.client_name_var = tk.StringVar(value="")
+        self.contact_var = tk.StringVar(value="")
+        self.shop_number_var = tk.StringVar(value="")
+        self.deposit_status_var = tk.StringVar(value="Deposite not recieved")
+        self.contract_status_var = tk.StringVar(value="under progress")
+
+        if self.master_app is not None:
+            if hasattr(self.master_app, "client_name_var"):
+                current_name = str(self.master_app.client_name_var.get() or "").strip()
+                if current_name and current_name != T("<New Client>"):
+                    self.client_name_var.set(current_name)
+            if hasattr(self.master_app, "contact_var"):
+                self.contact_var.set(self.master_app.contact_var.get().strip())
+            if hasattr(self.master_app, "shop_number_var"):
+                self.shop_number_var.set(self.master_app.shop_number_var.get().strip())
+
+        if self.client_name_var.get():
+            client = self._find_client(self.client_name_var.get())
+            if client is not None:
+                reservation = getattr(client, "reservation_status", {}) or {}
+                if reservation.get("client_name"):
+                    self.client_name_var.set(reservation.get("client_name", self.client_name_var.get()))
+                if reservation.get("contact"):
+                    self.contact_var.set(reservation.get("contact", self.contact_var.get()))
+                if reservation.get("shop_number"):
+                    self.shop_number_var.set(reservation.get("shop_number", self.shop_number_var.get()))
+                if reservation.get("deposit_status"):
+                    self.deposit_status_var.set(reservation.get("deposit_status", self.deposit_status_var.get()))
+                if reservation.get("contract_status"):
+                    self.contract_status_var.set(reservation.get("contract_status", self.contract_status_var.get()))
+
+        fields = [
+            (T("Client Name"), self.client_name_var),
+            (T("Contact"), self.contact_var),
+            (T("Shop Number to Reserve"), self.shop_number_var),
+        ]
+
+        for row_index, (label_text, var) in enumerate(fields):
+            ttk.Label(main, text=label_text, font=("Segoe UI", 10, "bold")).grid(row=row_index, column=0, sticky="w", padx=(0, 12), pady=(0, 8))
+            ttk.Entry(main, textvariable=var, width=30).grid(row=row_index, column=1, sticky="ew", pady=(0, 8))
+
+        ttk.Label(main, text=T("Deposit Money Received"), font=("Segoe UI", 10, "bold")).grid(row=3, column=0, sticky="w", padx=(0, 12), pady=(0, 8))
+        deposit_combo = ttk.Combobox(
+            main,
+            textvariable=self.deposit_status_var,
+            values=["Deposite recieved", "Deposite not recieved"],
+            state="readonly",
+            width=28,
+        )
+        deposit_combo.grid(row=3, column=1, sticky="ew", pady=(0, 8))
+        deposit_combo.bind("<<ComboboxSelected>>", self._update_contract_status_option)
+
+        ttk.Label(main, text=T("Preliminary Contract Status"), font=("Segoe UI", 10, "bold")).grid(row=4, column=0, sticky="w", padx=(0, 12), pady=(0, 8))
+        status_values = ["completed", "under progress"] if self.deposit_status_var.get().strip().lower() == "deposite recieved" else ["under progress"]
+        self.contract_status_var.set(status_values[0] if status_values else "under progress")
+        status_combo = ttk.Combobox(main, textvariable=self.contract_status_var, values=status_values, state="readonly", width=28)
+        status_combo.grid(row=4, column=1, sticky="ew", pady=(0, 8))
+
+        button_row = ttk.Frame(main)
+        button_row.grid(row=5, column=0, columnspan=2, sticky="e", pady=(12, 0))
+        ttk.Button(button_row, text=T("Save"), command=self.save_status).pack(side="left", padx=(0, 8))
+        ttk.Button(button_row, text=T("Close"), command=self.destroy).pack(side="left")
+
+        self.bind("<Escape>", lambda event: self.destroy())
+
+    def _update_contract_status_option(self, event=None):
+        deposit_value = self.deposit_status_var.get().strip()
+        if deposit_value.lower() == "deposite recieved":
+            options = ["completed", "under progress"]
+        else:
+            options = ["under progress"]
+        self.contract_status_var.set(options[0])
+        for child in self.winfo_children():
+            for widget in child.winfo_children():
+                if isinstance(widget, ttk.Combobox) and widget is not getattr(self, "_contract_status_combo", None):
+                    pass
+
+    def _find_client(self, client_name):
+        if not client_name:
+            return None
+        self.manager.load_clients()
+        return next((client for client in self.manager.clients if client.name.lower() == client_name.lower()), None)
+
+    def _available_shop_numbers(self, current_client_name=""):
+        shop_file = Path(__file__).resolve().parent / "Shops_Elect_meters.json"
+        known_shops = []
+        if shop_file.exists():
+            try:
+                with shop_file.open("r", encoding="utf-8") as infile:
+                    data = json.load(infile)
+                if isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, dict):
+                            shop = str(item.get("Shop") or item.get("shop") or "").strip()
+                            if shop:
+                                known_shops.append(shop)
+            except (json.JSONDecodeError, OSError, TypeError):
+                pass
+
+        if not known_shops:
+            known_shops = [str(index) for index in range(1, 101)]
+
+        self.manager.load_clients()
+        used_shops = set()
+        for client in self.manager.clients:
+            shop_value = str(getattr(client, "shop_number", "") or "").strip()
+            if not shop_value:
+                continue
+            if current_client_name and client.name.strip().lower() == current_client_name.strip().lower():
+                continue
+            used_shops.add(shop_value)
+
+        available = [shop for shop in known_shops if shop not in used_shops]
+        return available
+
+    def save_status(self):
+        client_name = self.client_name_var.get().strip()
+        contact = self.contact_var.get().strip()
+        shop_number = self.shop_number_var.get().strip()
+        deposit_status = self.deposit_status_var.get().strip() or "Deposite not recieved"
+        contract_status = self.contract_status_var.get().strip() or "under progress"
+
+        if deposit_status.lower() == "deposite recieved":
+            contract_status = "completed" if contract_status.lower() in {"completed", "complete", "done"} else "completed"
+        else:
+            contract_status = "under progress"
+
+        if not client_name:
+            messagebox.showwarning(T("Missing client"), T("Please enter the client name before saving the reservation status."))
+            return
+        if not contact:
+            messagebox.showwarning(T("Missing contact"), T("Please enter the client contact number before saving the reservation status."))
+            return
+        if not shop_number:
+            messagebox.showwarning(T("Missing shop number"), T("Please enter the shop number to reserve before saving the reservation status."))
+            return
+
+        self.manager.load_clients()
+        client = self._find_client(client_name)
+        if client is not None and str(getattr(client, "shop_number", "") or "").strip() == shop_number:
+            pass
+        else:
+            used = False
+            for existing_client in self.manager.clients:
+                if existing_client.name.strip().lower() == client_name.strip().lower():
+                    continue
+                if str(getattr(existing_client, "shop_number", "") or "").strip() == shop_number:
+                    used = True
+                    break
+
+            if used:
+                available = self._available_shop_numbers(current_client_name=client_name)
+                available_text = ", ".join(available) if available else "No available shop numbers remain"
+                messagebox.showwarning(
+                    T("Shop unavailable"),
+                    T("Shop number '{shop}' is already assigned to another client. Available shop numbers: {available}.", shop=shop_number, available=available_text),
+                )
+                return
+
+        if client is None:
+            client = Client(client_name, contact, "Reserved", shop_number=shop_number, reservation_status={
+                "client_name": client_name,
+                "contact": contact,
+                "shop_number": shop_number,
+                "deposit_status": deposit_status,
+                "contract_status": contract_status,
+            })
+            self.manager.clients.append(client)
+        else:
+            client.contact = format_contact_number(contact, DEFAULT_CONTACT_COUNTRY_CODE)
+            client.shop_number = shop_number
+            client.reservation_status = {
+                "client_name": client_name,
+                "contact": client.contact,
+                "shop_number": shop_number,
+                "deposit_status": deposit_status,
+                "contract_status": contract_status,
+            }
+
+        self.manager.save_clients()
+
+        if self.master_app is not None and hasattr(self.master_app, "client_name_var"):
+            self.master_app.client_name_var.set(client_name)
+        if self.master_app is not None and hasattr(self.master_app, "contact_var"):
+            self.master_app.contact_var.set(contact)
+        if self.master_app is not None and hasattr(self.master_app, "shop_number_var"):
+            self.master_app.shop_number_var.set(shop_number)
+
+        messagebox.showinfo(T("Reservation status saved"), T("Reservation status for '{name}' was saved successfully.", name=client_name))
+        self.destroy()
+
+
 class AllClientsProgressWindow(tk.Toplevel):
     def __init__(self, master=None):
         super().__init__(master)
@@ -4857,17 +5121,23 @@ class AllClientsProgressWindow(tk.Toplevel):
         self.manager = ClientManager("clients.json")
         self.tree = ttk.Treeview(
             self,
-            columns=("client", "business", "progress", "tasks"),
+            columns=("client", "contact", "business", "shop_number", "electrical_meter", "progress", "tasks"),
             show="headings",
         )
         self.tree.heading("client", text=T("Client"))
+        self.tree.heading("contact", text=T("Contact"))
         self.tree.heading("business", text=T("Business"))
+        self.tree.heading("shop_number", text=T("Shop Number"))
+        self.tree.heading("electrical_meter", text=T("Electrical Meter"))
         self.tree.heading("progress", text=T("Progress"))
         self.tree.heading("tasks", text="المتبقي / الإجمالي")
-        self.tree.column("client", width=190, anchor="w")
-        self.tree.column("business", width=220, anchor="w")
-        self.tree.column("progress", width=110, anchor="center")
-        self.tree.column("tasks", width=150, anchor="center")
+        self.tree.column("client", width=140, anchor="w")
+        self.tree.column("contact", width=140, anchor="w")
+        self.tree.column("business", width=170, anchor="w")
+        self.tree.column("shop_number", width=90, anchor="center")
+        self.tree.column("electrical_meter", width=120, anchor="w")
+        self.tree.column("progress", width=90, anchor="center")
+        self.tree.column("tasks", width=120, anchor="center")
         self.tree.pack(fill="both", expand=True, padx=12, pady=(12, 8))
 
         self.tree.bind("<Double-1>", self.edit_selected_client)
@@ -4919,7 +5189,7 @@ class AllClientsProgressWindow(tk.Toplevel):
             return
 
         client_name = values[0]
-        business = values[1] if len(values) > 1 else "N/A"
+        business = values[2] if len(values) > 2 else "N/A"
 
         if self.master and hasattr(self.master, "open_client_window"):
             self.master.open_client_window(client_name=client_name)
@@ -4971,18 +5241,10 @@ class AllClientsProgressWindow(tk.Toplevel):
         for client in self.manager.clients:
             seen.add(client.name)
             progress_info = all_progress.get(client.name, {})
-            progress = progress_info.get("progress", 0)
-            pending_tasks = progress_info.get("pending_tasks", [])
-            all_tasks = progress_info.get("all_tasks", [])
             self.tree.insert(
                 "",
                 "end",
-                values=(
-                    client.name,
-                    client.business,
-                    f"{progress}%",
-                    f"{len(pending_tasks)} / {len(all_tasks)}",
-                ),
+                values=build_all_clients_row_values(client, progress_info),
             )
 
         for client_name, progress_info in all_progress.items():
@@ -4995,7 +5257,10 @@ class AllClientsProgressWindow(tk.Toplevel):
                 "end",
                 values=(
                     client_name,
+                    "",
                     "Saved progress only",
+                    "",
+                    "",
                     f"{progress_info.get('progress', 0)}%",
                     f"{len(pending_tasks)} / {len(all_tasks)}",
                 ),

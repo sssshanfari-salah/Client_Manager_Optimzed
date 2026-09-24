@@ -36,7 +36,8 @@
       "pending_tasks": [],
       "all_tasks": []
     },
-    "transactions": []
+    "transactions": [],
+    "reservation_status": {}
   },
   {
     "name": "Salah",
@@ -64,7 +65,8 @@
       "pending_tasks": [],
       "all_tasks": []
     },
-    "transactions": []
+    "transactions": [],
+    "reservation_status": {}
   },
   {
     "name": "Salim Salah",
@@ -92,6 +94,7 @@
       "pending_tasks": [],
       "all_tasks": []
     },
-    "transactions": []
+    "transactions": [],
+    "reservation_status": {}
   }
 ]

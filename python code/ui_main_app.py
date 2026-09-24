@@ -52,7 +52,9 @@ class ProgressApp(StateBinding, TaskActions, ClientActions, ReportActions, tk.Tk
 
     def go_home(self):
         self.destroy()
-        WelcomeWindow().mainloop()
+        welcome = WelcomeWindow()
+        welcome.after(50, welcome.refresh_access_state)
+        welcome.mainloop()
 
     def build_ui(self):
         main = ttk.Frame(self, padding=14)

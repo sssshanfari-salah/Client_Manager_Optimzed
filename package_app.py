@@ -152,17 +152,17 @@ def validate_runtime_asset_catalog():
         )
 
     ui_files = [
-        SOURCE_DIR / "ui_main_app.py",
-        SOURCE_DIR / "ui_windows.py",
         SOURCE_DIR / "clients_progress_ui.py",
+        SOURCE_DIR / "ui_main_app.py",
+        SOURCE_DIR / "ui_shared.py",
+        SOURCE_DIR / "ui_windows.py",
     ]
     ui_content = ""
     ui_file = None
     for candidate in ui_files:
         if candidate.exists():
             ui_file = candidate
-            ui_content = candidate.read_text(encoding="utf-8")
-            break
+            ui_content += candidate.read_text(encoding="utf-8") + "\n"
 
     if ui_file is None:
         raise RuntimeError("Packaging aborted: no UI entry file was found for the client manager app.")
@@ -171,26 +171,53 @@ def validate_runtime_asset_catalog():
         "class ProgressApp",
         "class WelcomeWindow",
         "def safe_main",
+        "def exit_app",
         "def resolve_log_output_dir",
         "def parse_task_items",
         "class Plan",
         "class ContractDetailsWindow",
+        "class ReservationStatusWindow",
         "class ClientPaymentReportWindow",
         "def T",
         "from ui_actions.state_binding import StateBinding",
         "from translations import T, CURRENT_LANGUAGE",
+        "build_all_clients_row_values",
+        "electrical_meter",
+        "shop_number",
+        "reservation_status",
+        "Reservation Status",
+        "open_reservation_status_window",
+        "_available_shop_numbers",
+        "Shop unavailable",
+        "Available shop numbers",
+        "overview_button",
+        "state=\"disabled\"",
+        "is_registered_user_profile()",
+        "_sync_overview_access",
+        "Deposit Money Received",
+        "Deposite recieved",
+        "Deposite not recieved",
+        "_update_contract_status_option",
+    ]
+    all_clients_layout_markers = [
+        "build_all_clients_row_values",
+        "columns=(\"client\", \"contact\", \"business\", \"shop_number\", \"electrical_meter\", \"progress\", \"tasks\")",
+        "self.tree.heading(\"electrical_meter\"",
+        "self.tree.heading(\"progress\"",
+        "self.tree.heading(\"tasks\"",
     ]
     legacy_ui_markers = [
         "from ui_windows import *",
         "from ui_main_app import ProgressApp",
     ]
     window_coverage = any(marker in ui_content for marker in essential_ui_markers)
+    all_clients_layout = any(marker in ui_content for marker in all_clients_layout_markers)
     compatibility_coverage = any(marker in ui_content for marker in legacy_ui_markers)
 
-    if not (window_coverage or compatibility_coverage):
-        details = "\n".join(f" - {marker}" for marker in essential_ui_markers)
+    if not (window_coverage or compatibility_coverage) or not all_clients_layout:
+        details = "\n".join(f" - {marker}" for marker in essential_ui_markers + all_clients_layout_markers)
         raise RuntimeError(
-            "Packaging aborted: the UI layout is missing required app sections.\n"
+            "Packaging aborted: the UI layout is missing required app sections or the All Clients table columns.\n"
             f"Missing markers:\n{details}"
         )
 
@@ -469,6 +496,11 @@ def normalize_legacy_client_data(entries):
         if not isinstance(progress_data, dict):
             progress_data = {}
         normalized_entry["progress"] = dict(progress_data)
+
+        reservation_status = normalized_entry.get("reservation_status")
+        if not isinstance(reservation_status, dict):
+            reservation_status = {}
+        normalized_entry["reservation_status"] = dict(reservation_status)
 
         reviews = normalized_entry.get("reviews")
         if not isinstance(reviews, list):

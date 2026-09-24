@@ -27,6 +27,56 @@ class WelcomeWindow(tk.Tk, BaseWindow):
         BaseWindow.__init__(self, title="Welcome", geometry="700x340")
         self.configure_window(self)
 
+        title = ttk.Label(self, text="Welcome", font=("Segoe UI", 18, "bold"))
+        title.pack(pady=(24, 10))
+
+        subtitle = ttk.Label(self, text="Client Manager", font=("Segoe UI", 11))
+        subtitle.pack(pady=(0, 16))
+
+        action_bar = ttk.Frame(self)
+        action_bar.pack(pady=(0, 18))
+        self.overview_button = ttk.Button(action_bar, text="Overview", command=self.open_overview, width=16, state="disabled")
+        self.overview_button.pack(side="left", padx=(0, 12))
+        ttk.Button(action_bar, text="Exit", command=self.exit_app, width=16).pack(side="left")
+
+        self.protocol("WM_DELETE_WINDOW", self.exit_app)
+        self.after(50, self.refresh_access_state)
+
+    def refresh_access_state(self):
+        try:
+            from clients_progress_ui import CURRENT_SESSION_PROFILE, is_registered_user_profile
+            enabled = bool(is_registered_user_profile(CURRENT_SESSION_PROFILE))
+        except Exception:
+            enabled = False
+        if hasattr(self, "overview_button"):
+            self.overview_button.configure(state="normal" if enabled else "disabled")
+
+    def open_overview(self):
+        if not hasattr(self, "overview_button") or self.overview_button.cget("state") == "disabled":
+            return
+        try:
+            self.destroy()
+        except Exception:
+            pass
+
+        app = open_overview_window()
+        try:
+            app.deiconify()
+            app.lift()
+            app.focus_set()
+        except Exception:
+            pass
+
+    def exit_app(self):
+        try:
+            self.destroy()
+        except Exception:
+            pass
+        try:
+            self.quit()
+        except Exception:
+            pass
+
 
 class ProgressApp(tk.Tk):
     def __init__(self):

@@ -25,6 +25,7 @@ from clients_progress_ui import (
     ProgressApp,
     T,
     apply_bidi_text,
+    build_all_clients_row_values,
     build_review_log_report_text,
     build_task_log_report_text,
     get_emoji_font_families,
@@ -34,6 +35,7 @@ from clients_progress_ui import (
     save_guest_profile,
     set_language,
     strip_task_number_prefix,
+    sync_session_profile,
     user_registeration,
     validate_translation_coverage,
 )
@@ -125,6 +127,63 @@ class ClientManagerTests(unittest.TestCase):
         self.assertEqual(len(manager.clients), 1)
         self.assertEqual(manager.clients[0].name, "Sarah")
 
+    def test_all_clients_row_includes_contact_shop_and_meter_fields(self):
+        client = Client("Nora", "+9685551234", "Consulting", "nora@example.com", "12", electrical_meter="EM-2048")
+        row = build_all_clients_row_values(client, {"progress": 80, "pending_tasks": ["A"], "all_tasks": ["A", "B"]})
+
+        self.assertEqual(row[0], "Nora")
+        self.assertEqual(row[1], "+9685551234")
+        self.assertEqual(row[2], "Consulting")
+        self.assertEqual(row[3], "12")
+        self.assertEqual(row[4], "EM-2048")
+        self.assertEqual(row[5], "80%")
+        self.assertEqual(row[6], "1 / 2")
+
+    def test_client_reservation_status_round_trips(self):
+        client = Client(
+            "Nora",
+            "+9685551234",
+            "Consulting",
+            "nora@example.com",
+            "12",
+            reservation_status={
+                "client_name": "Nora",
+                "contact": "+9685551234",
+                "shop_number": "12",
+                "contract_status": "under progress",
+            },
+        )
+
+        payload = client.to_dict()
+        rebuilt = Client.from_dict(payload)
+
+        self.assertEqual(rebuilt.reservation_status["shop_number"], "12")
+        self.assertEqual(rebuilt.reservation_status["contract_status"], "under progress")
+
+    def test_reservation_status_tracks_deposit_and_contract_completion(self):
+        status = {
+            "client_name": "Nora",
+            "contact": "+9685551234",
+            "shop_number": "12",
+            "deposit_status": "Deposite recieved",
+            "contract_status": "completed",
+        }
+
+        normalized = Client.from_dict({"name": "Nora", "contact": "+9685551234", "business": "Consulting", "reservation_status": status}).reservation_status
+
+        self.assertEqual(normalized["deposit_status"], "Deposite recieved")
+        self.assertEqual(normalized["contract_status"], "completed")
+
+        pending = Client.from_dict({
+            "name": "Nora",
+            "contact": "+9685551234",
+            "business": "Consulting",
+            "reservation_status": {"deposit_status": "Deposite not recieved", "contract_status": "completed"},
+        }).reservation_status
+
+        self.assertEqual(pending["deposit_status"], "Deposite not recieved")
+        self.assertEqual(pending["contract_status"], "under progress")
+
     def test_load_client_data_with_ui_like_field_names(self):
         with open(self.file_path, "w", encoding="utf-8") as file:
             json.dump([
@@ -198,6 +257,21 @@ class ClientManagerTests(unittest.TestCase):
         self.assertTrue(ui.is_guest_login_credentials("guest", "guest"))
         self.assertFalse(ui.is_guest_login_credentials("Guest", "alice@example.com"))
         self.assertFalse(ui.is_guest_login_credentials("Alice", "Guest"))
+
+    def test_session_profile_persists_until_explicit_logout(self):
+        import clients_progress_ui as ui
+
+        sync_session_profile("Guest", "Guest")
+        self.assertTrue(ui.is_guest_profile(ui.CURRENT_SESSION_PROFILE))
+
+        sync_session_profile("Alice", "alice@example.com")
+        self.assertEqual(ui.CURRENT_SESSION_PROFILE["name"], "Alice")
+        self.assertEqual(ui.CURRENT_SESSION_PROFILE["email"], "alice@example.com")
+        self.assertFalse(ui.is_guest_profile(ui.CURRENT_SESSION_PROFILE))
+
+        sync_session_profile(clear=True)
+        self.assertEqual(ui.CURRENT_SESSION_PROFILE["name"], "")
+        self.assertEqual(ui.CURRENT_SESSION_PROFILE["email"], "")
 
     def test_client_persistence_saves_permanent_project_files(self):
         temp_dir = Path(self.temp_dir.name)
