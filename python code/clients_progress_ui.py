@@ -1549,6 +1549,29 @@ class WelcomeWindow(tk.Tk):
         self.guest_mode = True
         self.destroy()
 
+    def _open_progress_panel(self):
+        self.destroy()
+        app = open_overview_window()
+        app.focus_section("overview")
+
+    def _open_transactions_panel(self):
+        if not is_registered_user_profile():
+            messagebox.showwarning(T("Access Denied"), T("Registered users only. Guest access is limited to clients, reviews and tasks."))
+            return
+        self.destroy()
+        app = open_overview_window()
+        try:
+            app.deiconify()
+            app.lift()
+            app.focus_set()
+        except Exception:
+            pass
+        try:
+            app.focus_section("overview")
+            app.open_transactions_window()
+        except Exception:
+            pass
+
     def _get_saved_contract_index_path(self):
         return APP_ROOT / "application_outputs" / "contracts" / "reservation_contracts.json"
 

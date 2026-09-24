@@ -11,8 +11,8 @@ from pathlib import Path
 # Packaging and app-build configuration for the Windows desktop client manager.
 # This file ensures the runtime assets are present, prepares PyInstaller packaging, and creates the desktop shortcut.
 APP_DIR = Path(__file__).resolve().parent
-SOURCE_DIR = APP_DIR / "python code"
-ENTRY_SCRIPT = SOURCE_DIR / "main.py"
+SOURCE_DIR = APP_DIR
+ENTRY_SCRIPT = APP_DIR / "src" / "app" / "bootstrap" / "main.py"
 DIST_DIR = APP_DIR / "dist"
 BUILD_DIR = APP_DIR / "build"
 APP_NAME = "clients_manager"
@@ -23,29 +23,29 @@ DEFAULT_COUNTRY_CODE = "+968"
 SPEC_FILE = APP_DIR / f"{APP_EXECUTABLE_NAME}.spec"
 
 APP_MODULE_FILES = [
-    SOURCE_DIR / "main.py",
-    SOURCE_DIR / "clients_management.py",
-    SOURCE_DIR / "clients_progress_ui.py",
-    SOURCE_DIR / "ui_reservation_contract.py",
-    SOURCE_DIR / "business_logic.py",
-    SOURCE_DIR / "reporting.py",
-    SOURCE_DIR / "data_access.py",
-    SOURCE_DIR / "translations.py",
-    SOURCE_DIR / "ui_shared.py",
-    SOURCE_DIR / "ui_main_app.py",
-    SOURCE_DIR / "ui_windows.py",
-    SOURCE_DIR / "ui_client_windows.py",
-    SOURCE_DIR / "ui_task_windows.py",
-    SOURCE_DIR / "ui_report_windows.py",
-    SOURCE_DIR / "ui_client_actions.py",
-    SOURCE_DIR / "ui_data_binding.py",
-    SOURCE_DIR / "ui_task_actions.py",
-    SOURCE_DIR / "ui_report_actions.py",
-    SOURCE_DIR / "ui_actions" / "__init__.py",
-    SOURCE_DIR / "ui_actions" / "client_actions.py",
-    SOURCE_DIR / "ui_actions" / "task_actions.py",
-    SOURCE_DIR / "ui_actions" / "report_actions.py",
-    SOURCE_DIR / "ui_actions" / "state_binding.py",
+    ENTRY_SCRIPT,
+    APP_DIR / "src" / "app" / "domain" / "clients_management.py",
+    APP_DIR / "src" / "app" / "ui" / "windows" / "clients_progress_ui.py",
+    APP_DIR / "src" / "app" / "ui" / "windows" / "ui_reservation_contract.py",
+    APP_DIR / "src" / "app" / "domain" / "business_logic.py",
+    APP_DIR / "src" / "app" / "services" / "reporting.py",
+    APP_DIR / "src" / "app" / "data" / "data_access.py",
+    APP_DIR / "src" / "app" / "i18n" / "translations.py",
+    APP_DIR / "src" / "app" / "ui" / "shared" / "ui_shared.py",
+    APP_DIR / "src" / "app" / "ui" / "windows" / "ui_main_app.py",
+    APP_DIR / "src" / "app" / "ui" / "windows" / "ui_windows.py",
+    APP_DIR / "src" / "app" / "ui" / "windows" / "ui_client_windows.py",
+    APP_DIR / "src" / "app" / "ui" / "windows" / "ui_task_windows.py",
+    APP_DIR / "src" / "app" / "ui" / "windows" / "ui_report_windows.py",
+    APP_DIR / "src" / "app" / "ui" / "actions" / "client_actions.py",
+    APP_DIR / "src" / "app" / "ui" / "windows" / "ui_data_binding.py",
+    APP_DIR / "src" / "app" / "ui" / "actions" / "task_actions.py",
+    APP_DIR / "src" / "app" / "ui" / "actions" / "report_actions.py",
+    APP_DIR / "src" / "app" / "ui" / "actions" / "__init__.py",
+    APP_DIR / "src" / "app" / "ui" / "actions" / "client_actions.py",
+    APP_DIR / "src" / "app" / "ui" / "actions" / "task_actions.py",
+    APP_DIR / "src" / "app" / "ui" / "actions" / "report_actions.py",
+    APP_DIR / "src" / "app" / "ui" / "actions" / "state_binding.py",
 ]
 
 
@@ -79,19 +79,37 @@ def resolve_target_icon():
 
 
 TARGET_ICON = resolve_target_icon()
-COUNTRY_CODES_DATA = SOURCE_DIR / "country_codes.json"
-SHOPS_ELECTRICAL_METERS_FILE = SOURCE_DIR / "Shops_Elect_meters.json"
-CLIENTS_DATA_FILE = APP_DIR / "clients.json"
-USERS_DATA_FILE = APP_DIR / "users.json"
-GUESTS_DATA_FILE = APP_DIR / "guests.json"
-LEGACY_USER_PROFILE_FILE = APP_DIR / "user_profile.json"
-CLIENTS_TASKS_DATA_FILE = APP_DIR / "clients_tasks.json"
-CLIENTS_REVIEWS_DATA_FILE = APP_DIR / "clients_reviews.json"
-LEGACY_CLIENTS_DATA_FILE = SOURCE_DIR / "clients.json"
-DOCUMENTS_DATA_FILE = SOURCE_DIR / "docs" / "documents.txt"
-SUPPORTING_DOCUMENTS_DIR = APP_DIR / "supporting_documents"
+APP_SOURCE_ROOT = APP_DIR / "src"
+LEGACY_SOURCE_DIR = APP_DIR / "python code"
+DATA_ROOT = APP_DIR / "data"
+JSON_DATA_DIR = DATA_ROOT / "json"
+DOCS_DATA_DIR = DATA_ROOT / "docs"
+LOGS_DATA_DIR = DATA_ROOT / "logs"
+SUPPORT_DATA_DIR = DATA_ROOT / "support"
+
+
+def prefer_existing(primary: Path, fallback: Path) -> Path:
+    return primary if primary.exists() else fallback
+
+
+JSON_DATA_DIR = prefer_existing(JSON_DATA_DIR, APP_DIR)
+DOCS_DATA_DIR = prefer_existing(DOCS_DATA_DIR, LEGACY_SOURCE_DIR / "docs")
+LOGS_DATA_DIR = prefer_existing(LOGS_DATA_DIR, APP_DIR / "application_outputs")
+SUPPORT_DATA_DIR = prefer_existing(SUPPORT_DATA_DIR, APP_DIR / "supporting_documents")
+
+COUNTRY_CODES_DATA = JSON_DATA_DIR / "country_codes.json"
+SHOPS_ELECTRICAL_METERS_FILE = JSON_DATA_DIR / "Shops_Elect_meters.json"
+CLIENTS_DATA_FILE = JSON_DATA_DIR / "clients.json"
+USERS_DATA_FILE = JSON_DATA_DIR / "users.json"
+GUESTS_DATA_FILE = JSON_DATA_DIR / "guests.json"
+LEGACY_USER_PROFILE_FILE = JSON_DATA_DIR / "user_profile.json"
+CLIENTS_TASKS_DATA_FILE = JSON_DATA_DIR / "clients_tasks.json"
+CLIENTS_REVIEWS_DATA_FILE = JSON_DATA_DIR / "clients_reviews.json"
+LEGACY_CLIENTS_DATA_FILE = prefer_existing(JSON_DATA_DIR / "clients.json", LEGACY_SOURCE_DIR / "clients.json")
+DOCUMENTS_DATA_FILE = prefer_existing(DOCS_DATA_DIR / "documents.txt", LEGACY_SOURCE_DIR / "docs" / "documents.txt")
+SUPPORTING_DOCUMENTS_DIR = prefer_existing(SUPPORT_DATA_DIR / "supporting_documents", APP_DIR / "supporting_documents")
 STARCO_RENT_CONTRACT = SUPPORTING_DOCUMENTS_DIR / "starco_rent_contract_1.pdf"
-APPLICATION_OUTPUTS_DIR = APP_DIR / "application_outputs"
+APPLICATION_OUTPUTS_DIR = prefer_existing(LOGS_DATA_DIR / "application_outputs", APP_DIR / "application_outputs")
 CONTRACTS_OUTPUT_DIR = APPLICATION_OUTPUTS_DIR / "contracts"
 RESERVATION_CONTRACTS_INDEX_FILE = CONTRACTS_OUTPUT_DIR / "reservation_contracts.json"
 CLIENTS_ROOT_DIR = APP_DIR / "Clients"
@@ -100,10 +118,14 @@ TASK_LOGS_DIR = APPLICATION_OUTPUTS_DIR / "tasks_logs"
 OBSERVATION_LOGS_DIR = APPLICATION_OUTPUTS_DIR / "observation_logs"
 OUTPUT_LOG_DIRS = [APPLICATION_OUTPUTS_DIR, CLIENT_LOGS_DIR, TASK_LOGS_DIR, OBSERVATION_LOGS_DIR, CONTRACTS_OUTPUT_DIR]
 PROJECT_RUNTIME_DIRECTORIES = [
-    APP_DIR / "supporting_documents",
+    DATA_ROOT,
+    JSON_DATA_DIR,
+    DOCS_DATA_DIR,
+    LOGS_DATA_DIR,
+    SUPPORT_DATA_DIR,
+    SUPPORTING_DOCUMENTS_DIR,
     APP_DIR / "starco icon",
-    SOURCE_DIR,
-    SOURCE_DIR / "docs",
+    APP_DIR / "src",
     CLIENTS_ROOT_DIR,
     *OUTPUT_LOG_DIRS,
 ]
@@ -138,7 +160,6 @@ def validate_runtime_asset_catalog():
     required_paths = [
         ENTRY_SCRIPT,
         *APP_MODULE_FILES,
-        SOURCE_DIR / "ui_actions",
         *ROOT_RUNTIME_FILES,
         LEGACY_CLIENTS_DATA_FILE,
         SUPPORTING_DOCUMENTS_DIR,
@@ -156,11 +177,16 @@ def validate_runtime_asset_catalog():
         )
 
     ui_files = [
-        SOURCE_DIR / "clients_progress_ui.py",
-        SOURCE_DIR / "ui_reservation_contract.py",
-        SOURCE_DIR / "ui_main_app.py",
-        SOURCE_DIR / "ui_shared.py",
-        SOURCE_DIR / "ui_windows.py",
+        APP_SOURCE_ROOT / "app" / "ui" / "windows" / "clients_progress_ui.py",
+        APP_SOURCE_ROOT / "app" / "ui" / "windows" / "ui_reservation_contract.py",
+        APP_SOURCE_ROOT / "app" / "ui" / "windows" / "ui_main_app.py",
+        APP_SOURCE_ROOT / "app" / "ui" / "shared" / "ui_shared.py",
+        APP_SOURCE_ROOT / "app" / "ui" / "windows" / "ui_windows.py",
+        LEGACY_SOURCE_DIR / "clients_progress_ui.py",
+        LEGACY_SOURCE_DIR / "ui_reservation_contract.py",
+        LEGACY_SOURCE_DIR / "ui_main_app.py",
+        LEGACY_SOURCE_DIR / "ui_shared.py",
+        LEGACY_SOURCE_DIR / "ui_windows.py",
     ]
     ui_content = ""
     ui_file = None
