@@ -86,11 +86,9 @@ def normalize_reservation_status(value):
     else:
         normalized["deposit_status"] = "Deposite not recieved"
 
-    status = normalized["contract_status"].strip().lower()
-    if normalized["deposit_status"].lower() == "deposite recieved" and status in {"completed", "complete", "done"}:
-        normalized["contract_status"] = "completed"
-    elif normalized["deposit_status"].lower() == "deposite recieved":
-        normalized["contract_status"] = "completed"
+    if normalized["deposit_status"].lower() == "deposite recieved":
+        status = normalized["contract_status"].strip().lower()
+        normalized["contract_status"] = "completed" if status in {"completed", "complete", "done"} else "completed"
     else:
         normalized["contract_status"] = "under progress"
 

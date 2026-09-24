@@ -22,88 +22,45 @@ class BaseWindow:
 
 
 class WelcomeWindow(tk.Tk, BaseWindow):
-    def __init__(self):
-        tk.Tk.__init__(self)
-        BaseWindow.__init__(self, title="Welcome", geometry="700x340")
-        self.configure_window(self)
+    """Compatibility wrapper for the canonical welcome window in clients_progress_ui."""
 
-        title = ttk.Label(self, text="Welcome", font=("Segoe UI", 18, "bold"))
-        title.pack(pady=(24, 10))
+    def __new__(cls, *args, **kwargs):
+        from clients_progress_ui import WelcomeWindow as CanonicalWelcomeWindow
+        return CanonicalWelcomeWindow(*args, **kwargs)
 
-        subtitle = ttk.Label(self, text="Client Manager", font=("Segoe UI", 11))
-        subtitle.pack(pady=(0, 16))
-
-        action_bar = ttk.Frame(self)
-        action_bar.pack(pady=(0, 18))
-        self.overview_button = ttk.Button(action_bar, text="Overview", command=self.open_overview, width=16, state="disabled")
-        self.overview_button.pack(side="left", padx=(0, 12))
-        ttk.Button(action_bar, text="Exit", command=self.exit_app, width=16).pack(side="left")
-
-        self.protocol("WM_DELETE_WINDOW", self.exit_app)
-        self.after(50, self.refresh_access_state)
-
-    def refresh_access_state(self):
-        try:
-            from clients_progress_ui import CURRENT_SESSION_PROFILE, is_registered_user_profile
-            enabled = bool(is_registered_user_profile(CURRENT_SESSION_PROFILE))
-        except Exception:
-            enabled = False
-        if hasattr(self, "overview_button"):
-            self.overview_button.configure(state="normal" if enabled else "disabled")
-
-    def open_overview(self):
-        if not hasattr(self, "overview_button") or self.overview_button.cget("state") == "disabled":
-            return
-        try:
-            self.destroy()
-        except Exception:
-            pass
-
-        app = open_overview_window()
-        try:
-            app.deiconify()
-            app.lift()
-            app.focus_set()
-        except Exception:
-            pass
-
-    def exit_app(self):
-        try:
-            self.destroy()
-        except Exception:
-            pass
-        try:
-            self.quit()
-        except Exception:
-            pass
+    def __init__(self, *args, **kwargs):
+        pass
 
 
 class ProgressApp(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("Client Progress Manager")
-        self.geometry("1100x700")
+    """Compatibility wrapper for the canonical overview window in clients_progress_ui."""
+
+    def __new__(cls, *args, **kwargs):
+        from clients_progress_ui import ProgressApp as CanonicalProgressApp
+        return CanonicalProgressApp(*args, **kwargs)
+
+    def __init__(self, *args, **kwargs):
+        pass
 
 
 def build_startup_splash():
-    splash = tk.Tk()
-    splash.overrideredirect(True)
-    splash.configure(bg="#09111d")
-    splash.geometry("600x400")
-    return splash
+    from clients_progress_ui import build_startup_splash as canonical_build_startup_splash
+    return canonical_build_startup_splash()
 
 
 def open_overview_window():
-    return ProgressApp()
+    from clients_progress_ui import open_overview_window as canonical_open_overview_window
+    return canonical_open_overview_window()
 
 
 def open_welcome_home():
-    WelcomeWindow().mainloop()
+    from clients_progress_ui import open_welcome_home as canonical_open_welcome_home
+    return canonical_open_welcome_home()
 
 
 def safe_main():
-    welcome = WelcomeWindow()
-    welcome.mainloop()
+    from clients_progress_ui import safe_main as canonical_safe_main
+    return canonical_safe_main()
 
 
 __all__ = [

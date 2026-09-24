@@ -182,8 +182,14 @@ def validate_runtime_asset_catalog():
         "from ui_actions.state_binding import StateBinding",
         "from translations import T, CURRENT_LANGUAGE",
         "build_all_clients_row_values",
+        "def resolve_shop_electrical_meter",
+        "self.electrical_meter_var = tk.StringVar(value=\"\")",
+        "self.shop_number_var.trace_add(\"write\", self._sync_meter_from_shop_number)",
+        "ttk.Label(main, text=T(\"Electrical Meter\")",
+        "self.electrical_meter_var.set(resolve_shop_electrical_meter(shop_number))",
         "electrical_meter",
         "shop_number",
+        "resolve_shop_electrical_meter(shop_number)",
         "reservation_status",
         "Reservation Status",
         "open_reservation_status_window",
@@ -198,11 +204,13 @@ def validate_runtime_asset_catalog():
         "Deposite recieved",
         "Deposite not recieved",
         "_update_contract_status_option",
+        "self.master_app.electrical_meter_var.set(client.electrical_meter)",
     ]
     all_clients_layout_markers = [
         "build_all_clients_row_values",
-        "columns=(\"client\", \"contact\", \"business\", \"shop_number\", \"electrical_meter\", \"progress\", \"tasks\")",
+        "columns=(\"client\", \"contact\", \"business\", \"shop_number\", \"electrical_meter\", \"reservation_status\", \"progress\", \"tasks\")",
         "self.tree.heading(\"electrical_meter\"",
+        "self.tree.heading(\"reservation_status\"",
         "self.tree.heading(\"progress\"",
         "self.tree.heading(\"tasks\"",
     ]
@@ -737,6 +745,42 @@ def remove_directory(path):
         print(f"Warning: could not fully remove {path}. Continuing with the rebuild attempt.")
 
 
+def ensure_shop_electrical_meter_entries():
+    SHOPS_ELECTRICAL_METERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    default_entries = {
+        str(shop_number): "000000" for shop_number in range(19, 37)
+    }
+
+    try:
+        if SHOPS_ELECTRICAL_METERS_FILE.exists():
+            with SHOPS_ELECTRICAL_METERS_FILE.open("r", encoding="utf-8") as infile:
+                data = json.load(infile)
+        else:
+            data = []
+    except (json.JSONDecodeError, OSError, TypeError):
+        data = []
+
+    if not isinstance(data, list):
+        data = []
+
+    current_values = {}
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        shop_value = str(item.get("Shop") or item.get("shop") or item.get("shop_number") or "").strip()
+        meter_value = str(item.get("Elec meter") or item.get("Elec Meter") or item.get("electrical_meter") or "").strip()
+        if shop_value:
+            current_values[shop_value] = meter_value
+
+    for shop_number, meter_value in default_entries.items():
+        existing = current_values.get(shop_number)
+        if existing is None or not str(existing).strip():
+            data.append({"Shop": shop_number, "Elec meter": meter_value})
+            current_values[shop_number] = meter_value
+
+    SHOPS_ELECTRICAL_METERS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def ensure_runtime_files():
     APP_DIR.mkdir(parents=True, exist_ok=True)
     SOURCE_DIR.mkdir(parents=True, exist_ok=True)
@@ -770,9 +814,7 @@ def ensure_runtime_files():
     if not COUNTRY_CODES_DATA.exists():
         COUNTRY_CODES_DATA.write_text("[]", encoding="utf-8")
 
-    SHOPS_ELECTRICAL_METERS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    if not SHOPS_ELECTRICAL_METERS_FILE.exists():
-        SHOPS_ELECTRICAL_METERS_FILE.write_text("[]", encoding="utf-8")
+    ensure_shop_electrical_meter_entries()
 
     DOCUMENTS_DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
     if not DOCUMENTS_DATA_FILE.exists():

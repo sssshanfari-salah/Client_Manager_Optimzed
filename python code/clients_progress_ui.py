@@ -376,12 +376,22 @@ def build_all_clients_row_values(client, progress_info=None):
     pending_tasks = progress_info.get("pending_tasks", [])
     all_tasks = progress_info.get("all_tasks", [])
 
+    reservation = getattr(client, "reservation_status", {}) or {}
+    contract_status = str(reservation.get("contract_status", "") or "").strip().lower()
+    if contract_status in {"completed", "complete", "done"}:
+        reservation_status = "Completed"
+    elif contract_status == "under progress":
+        reservation_status = "Under progress"
+    else:
+        reservation_status = "Not reserved"
+
     return (
         client.name,
         getattr(client, "contact", ""),
         client.business,
         getattr(client, "shop_number", ""),
         getattr(client, "electrical_meter", getattr(client, "notes", "")),
+        reservation_status,
         f"{progress}%",
         f"{len(pending_tasks)} / {len(all_tasks)}",
     )
@@ -408,7 +418,45 @@ def resolve_log_output_dir(log_type="general"):
 
 def load_shop_electrical_meter_map():
     meters_path = Path(__file__).resolve().parent / "Shops_Elect_meters.json"
-    mapping = {}
+    mapping = {
+        "1": "28600022",
+        "2": "28602713",
+        "3": "28602714",
+        "4": "28602710",
+        "5": "28602692",
+        "6": "28602712",
+        "7": "28602709",
+        "8": "28602711",
+        "9": "28609691",
+        "10": "28609681",
+        "11": "28609682",
+        "12": "28609687",
+        "13": "28609683",
+        "14": "28609688",
+        "15": "28609689",
+        "16": "28609684",
+        "17": "28609685",
+        "18": "28609690",
+        "19": "28609692",
+        "20": "28609693",
+        "21": "28609694",
+        "22": "28609695",
+        "23": "28609696",
+        "24": "28609697",
+        "25": "28609698",
+        "26": "28609699",
+        "27": "28609700",
+        "28": "28609701",
+        "29": "28609702",
+        "30": "28609703",
+        "31": "28609704",
+        "32": "28609705",
+        "33": "28609706",
+        "34": "28609707",
+        "35": "28609708",
+        "36": "28609709",
+        "Office": "28609686",
+    }
     if not meters_path.exists():
         return mapping
 
@@ -429,6 +477,29 @@ def load_shop_electrical_meter_map():
         if shop_value and meter_value:
             mapping[shop_value] = meter_value
     return mapping
+
+
+def resolve_shop_electrical_meter(shop_number):
+    shop_value = str(shop_number or "").strip()
+    if not shop_value:
+        return ""
+
+    mapping = load_shop_electrical_meter_map()
+    if shop_value in mapping:
+        return str(mapping[shop_value]).strip()
+
+    normalized = shop_value.lower()
+    if normalized == "office":
+        return str(mapping.get("Office", "")).strip()
+
+    try:
+        shop_id = int(shop_value)
+    except ValueError:
+        return ""
+
+    if 1 <= shop_id <= 36:
+        return str(mapping.get(str(shop_id), "")).strip()
+    return ""
 
 
 def load_country_codes():
@@ -4922,6 +4993,7 @@ class ReservationStatusWindow(tk.Toplevel):
         self.client_name_var = tk.StringVar(value="")
         self.contact_var = tk.StringVar(value="")
         self.shop_number_var = tk.StringVar(value="")
+        self.electrical_meter_var = tk.StringVar(value="")
         self.deposit_status_var = tk.StringVar(value="Deposite not recieved")
         self.contract_status_var = tk.StringVar(value="under progress")
 
@@ -4934,6 +5006,11 @@ class ReservationStatusWindow(tk.Toplevel):
                 self.contact_var.set(self.master_app.contact_var.get().strip())
             if hasattr(self.master_app, "shop_number_var"):
                 self.shop_number_var.set(self.master_app.shop_number_var.get().strip())
+            if hasattr(self.master_app, "electrical_meter_var"):
+                self.electrical_meter_var.set(self.master_app.electrical_meter_var.get().strip())
+
+        if self.shop_number_var.get():
+            self.electrical_meter_var.set(resolve_shop_electrical_meter(self.shop_number_var.get()))
 
         if self.client_name_var.get():
             client = self._find_client(self.client_name_var.get())
@@ -4960,7 +5037,12 @@ class ReservationStatusWindow(tk.Toplevel):
             ttk.Label(main, text=label_text, font=("Segoe UI", 10, "bold")).grid(row=row_index, column=0, sticky="w", padx=(0, 12), pady=(0, 8))
             ttk.Entry(main, textvariable=var, width=30).grid(row=row_index, column=1, sticky="ew", pady=(0, 8))
 
-        ttk.Label(main, text=T("Deposit Money Received"), font=("Segoe UI", 10, "bold")).grid(row=3, column=0, sticky="w", padx=(0, 12), pady=(0, 8))
+        self.shop_number_var.trace_add("write", self._sync_meter_from_shop_number)
+
+        ttk.Label(main, text=T("Electrical Meter"), font=("Segoe UI", 10, "bold")).grid(row=3, column=0, sticky="w", padx=(0, 12), pady=(0, 8))
+        ttk.Entry(main, textvariable=self.electrical_meter_var, width=30).grid(row=3, column=1, sticky="ew", pady=(0, 8))
+
+        ttk.Label(main, text=T("Deposit Money Received"), font=("Segoe UI", 10, "bold")).grid(row=4, column=0, sticky="w", padx=(0, 12), pady=(0, 8))
         deposit_combo = ttk.Combobox(
             main,
             textvariable=self.deposit_status_var,
@@ -4968,33 +5050,43 @@ class ReservationStatusWindow(tk.Toplevel):
             state="readonly",
             width=28,
         )
-        deposit_combo.grid(row=3, column=1, sticky="ew", pady=(0, 8))
+        deposit_combo.grid(row=4, column=1, sticky="ew", pady=(0, 8))
         deposit_combo.bind("<<ComboboxSelected>>", self._update_contract_status_option)
 
-        ttk.Label(main, text=T("Preliminary Contract Status"), font=("Segoe UI", 10, "bold")).grid(row=4, column=0, sticky="w", padx=(0, 12), pady=(0, 8))
+        ttk.Label(main, text=T("Preliminary Contract Status"), font=("Segoe UI", 10, "bold")).grid(row=5, column=0, sticky="w", padx=(0, 12), pady=(0, 8))
         status_values = ["completed", "under progress"] if self.deposit_status_var.get().strip().lower() == "deposite recieved" else ["under progress"]
         self.contract_status_var.set(status_values[0] if status_values else "under progress")
         status_combo = ttk.Combobox(main, textvariable=self.contract_status_var, values=status_values, state="readonly", width=28)
-        status_combo.grid(row=4, column=1, sticky="ew", pady=(0, 8))
+        status_combo.grid(row=5, column=1, sticky="ew", pady=(0, 8))
 
         button_row = ttk.Frame(main)
-        button_row.grid(row=5, column=0, columnspan=2, sticky="e", pady=(12, 0))
+        button_row.grid(row=6, column=0, columnspan=2, sticky="e", pady=(12, 0))
         ttk.Button(button_row, text=T("Save"), command=self.save_status).pack(side="left", padx=(0, 8))
         ttk.Button(button_row, text=T("Close"), command=self.destroy).pack(side="left")
 
         self.bind("<Escape>", lambda event: self.destroy())
 
+    def _sync_meter_from_shop_number(self, *args):
+        shop_number = self.shop_number_var.get().strip()
+        self.electrical_meter_var.set(resolve_shop_electrical_meter(shop_number))
+
     def _update_contract_status_option(self, event=None):
         deposit_value = self.deposit_status_var.get().strip()
         if deposit_value.lower() == "deposite recieved":
+            self.contract_status_var.set("completed")
             options = ["completed", "under progress"]
         else:
+            self.contract_status_var.set("under progress")
             options = ["under progress"]
-        self.contract_status_var.set(options[0])
+
         for child in self.winfo_children():
-            for widget in child.winfo_children():
-                if isinstance(widget, ttk.Combobox) and widget is not getattr(self, "_contract_status_combo", None):
-                    pass
+            if isinstance(child, ttk.Frame):
+                for widget in child.winfo_children():
+                    if isinstance(widget, ttk.Combobox) and widget["state"] == "readonly":
+                        try:
+                            widget.configure(values=options)
+                        except Exception:
+                            pass
 
     def _find_client(self, client_name):
         if not client_name:
@@ -5040,6 +5132,7 @@ class ReservationStatusWindow(tk.Toplevel):
         shop_number = self.shop_number_var.get().strip()
         deposit_status = self.deposit_status_var.get().strip() or "Deposite not recieved"
         contract_status = self.contract_status_var.get().strip() or "under progress"
+        electrical_meter = str(self.electrical_meter_var.get().strip() or resolve_shop_electrical_meter(shop_number) or "")
 
         if deposit_status.lower() == "deposite recieved":
             contract_status = "completed" if contract_status.lower() in {"completed", "complete", "done"} else "completed"
@@ -5058,18 +5151,19 @@ class ReservationStatusWindow(tk.Toplevel):
 
         self.manager.load_clients()
         client = self._find_client(client_name)
-        if client is not None and str(getattr(client, "shop_number", "") or "").strip() == shop_number:
-            pass
-        else:
-            used = False
-            for existing_client in self.manager.clients:
-                if existing_client.name.strip().lower() == client_name.strip().lower():
-                    continue
-                if str(getattr(existing_client, "shop_number", "") or "").strip() == shop_number:
-                    used = True
-                    break
+        if client is None:
+            client = next(
+                (existing for existing in self.manager.clients if existing.contact == format_contact_number(contact, DEFAULT_CONTACT_COUNTRY_CODE)),
+                None,
+            )
 
-            if used:
+        if client is not None and str(getattr(client, "shop_number", "") or "").strip() not in {"", shop_number}:
+            other_clients = [
+                existing for existing in self.manager.clients
+                if existing.name.strip().lower() != client_name.strip().lower()
+                and str(getattr(existing, "shop_number", "") or "").strip() == shop_number
+            ]
+            if other_clients:
                 available = self._available_shop_numbers(current_client_name=client_name)
                 available_text = ", ".join(available) if available else "No available shop numbers remain"
                 messagebox.showwarning(
@@ -5079,33 +5173,71 @@ class ReservationStatusWindow(tk.Toplevel):
                 return
 
         if client is None:
-            client = Client(client_name, contact, "Reserved", shop_number=shop_number, reservation_status={
-                "client_name": client_name,
-                "contact": contact,
-                "shop_number": shop_number,
-                "deposit_status": deposit_status,
-                "contract_status": contract_status,
-            })
+            client = Client(
+                client_name,
+                contact,
+                "Reserved",
+                shop_number=shop_number,
+                address="",
+                notes=electrical_meter,
+                electrical_meter=electrical_meter,
+                reservation_status={
+                    "client_name": client_name,
+                    "contact": contact,
+                    "shop_number": shop_number,
+                    "deposit_status": deposit_status,
+                    "contract_status": contract_status,
+                },
+            )
             self.manager.clients.append(client)
         else:
+            client.name = client_name
             client.contact = format_contact_number(contact, DEFAULT_CONTACT_COUNTRY_CODE)
             client.shop_number = shop_number
-            client.reservation_status = {
+            client.electrical_meter = electrical_meter or str(getattr(client, "electrical_meter", getattr(client, "notes", "")) or "")
+            client.notes = client.electrical_meter
+            if self.master_app is not None:
+                if hasattr(self.master_app, "business_var"):
+                    business = str(self.master_app.business_var.get() or "").strip()
+                    if business:
+                        client.business = business
+                if hasattr(self.master_app, "email_var"):
+                    email = str(self.master_app.email_var.get() or "").strip()
+                    if email:
+                        client.email = email
+                if hasattr(self.master_app, "address_var"):
+                    address = str(self.master_app.address_var.get() or "").strip()
+                    if address:
+                        client.address = address
+            client.reservation_status = normalize_reservation_status({
                 "client_name": client_name,
                 "contact": client.contact,
                 "shop_number": shop_number,
                 "deposit_status": deposit_status,
                 "contract_status": contract_status,
-            }
+            })
 
         self.manager.save_clients()
 
-        if self.master_app is not None and hasattr(self.master_app, "client_name_var"):
-            self.master_app.client_name_var.set(client_name)
-        if self.master_app is not None and hasattr(self.master_app, "contact_var"):
-            self.master_app.contact_var.set(contact)
-        if self.master_app is not None and hasattr(self.master_app, "shop_number_var"):
-            self.master_app.shop_number_var.set(shop_number)
+        if self.master_app is not None:
+            if hasattr(self.master_app, "client_name_var"):
+                self.master_app.client_name_var.set(client_name)
+            if hasattr(self.master_app, "contact_var"):
+                self.master_app.contact_var.set(client.contact)
+            if hasattr(self.master_app, "shop_number_var"):
+                self.master_app.shop_number_var.set(shop_number)
+            if hasattr(self.master_app, "electrical_meter_var"):
+                self.master_app.electrical_meter_var.set(client.electrical_meter)
+            if hasattr(self.master_app, "address_var"):
+                self.master_app.address_var.set(str(getattr(client, "address", "") or ""))
+            if hasattr(self.master_app, "business_var") and not str(self.master_app.business_var.get() or "").strip():
+                self.master_app.business_var.set(str(getattr(client, "business", "") or ""))
+            if hasattr(self.master_app, "email_var") and not str(self.master_app.email_var.get() or "").strip():
+                self.master_app.email_var.set(str(getattr(client, "email", "") or ""))
+            if hasattr(self.master_app, "load_client_progress"):
+                self.master_app.load_client_progress(client_name, getattr(client, "business", ""))
+            if hasattr(self.master_app, "refresh_client_combo"):
+                self.master_app.refresh_client_combo()
 
         messagebox.showinfo(T("Reservation status saved"), T("Reservation status for '{name}' was saved successfully.", name=client_name))
         self.destroy()
@@ -5121,7 +5253,7 @@ class AllClientsProgressWindow(tk.Toplevel):
         self.manager = ClientManager("clients.json")
         self.tree = ttk.Treeview(
             self,
-            columns=("client", "contact", "business", "shop_number", "electrical_meter", "progress", "tasks"),
+            columns=("client", "contact", "business", "shop_number", "electrical_meter", "reservation_status", "progress", "tasks"),
             show="headings",
         )
         self.tree.heading("client", text=T("Client"))
@@ -5129,6 +5261,7 @@ class AllClientsProgressWindow(tk.Toplevel):
         self.tree.heading("business", text=T("Business"))
         self.tree.heading("shop_number", text=T("Shop Number"))
         self.tree.heading("electrical_meter", text=T("Electrical Meter"))
+        self.tree.heading("reservation_status", text=T("Reservation Status"))
         self.tree.heading("progress", text=T("Progress"))
         self.tree.heading("tasks", text="المتبقي / الإجمالي")
         self.tree.column("client", width=140, anchor="w")
@@ -5136,6 +5269,7 @@ class AllClientsProgressWindow(tk.Toplevel):
         self.tree.column("business", width=170, anchor="w")
         self.tree.column("shop_number", width=90, anchor="center")
         self.tree.column("electrical_meter", width=120, anchor="w")
+        self.tree.column("reservation_status", width=130, anchor="center")
         self.tree.column("progress", width=90, anchor="center")
         self.tree.column("tasks", width=120, anchor="center")
         self.tree.pack(fill="both", expand=True, padx=12, pady=(12, 8))
@@ -5261,6 +5395,7 @@ class AllClientsProgressWindow(tk.Toplevel):
                     "Saved progress only",
                     "",
                     "",
+                    "Not reserved",
                     f"{progress_info.get('progress', 0)}%",
                     f"{len(pending_tasks)} / {len(all_tasks)}",
                 ),

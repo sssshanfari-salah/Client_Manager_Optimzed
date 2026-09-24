@@ -32,6 +32,7 @@ from clients_progress_ui import (
     load_shop_electrical_meter_map,
     parse_task_items,
     resolve_log_output_dir,
+    resolve_shop_electrical_meter,
     save_guest_profile,
     set_language,
     strip_task_number_prefix,
@@ -99,6 +100,11 @@ class ClientManagerTests(unittest.TestCase):
         self.assertEqual(meters["12"], "28609687")
         self.assertEqual(meters["Office"], "28609686")
 
+    def test_reservation_save_resolves_electrical_meter_from_shop_number(self):
+        self.assertEqual(resolve_shop_electrical_meter("12"), "28609687")
+        self.assertEqual(resolve_shop_electrical_meter("Office"), "28609686")
+        self.assertEqual(resolve_shop_electrical_meter("999"), "")
+
     def test_search_client(self):
         manager = ClientManager(self.file_path)
         manager.add_client("Ali", "123456", "Stationery")
@@ -127,8 +133,16 @@ class ClientManagerTests(unittest.TestCase):
         self.assertEqual(len(manager.clients), 1)
         self.assertEqual(manager.clients[0].name, "Sarah")
 
-    def test_all_clients_row_includes_contact_shop_and_meter_fields(self):
-        client = Client("Nora", "+9685551234", "Consulting", "nora@example.com", "12", electrical_meter="EM-2048")
+    def test_all_clients_row_includes_contact_shop_meter_and_reservation_fields(self):
+        client = Client(
+            "Nora",
+            "+9685551234",
+            "Consulting",
+            "nora@example.com",
+            "12",
+            electrical_meter="EM-2048",
+            reservation_status={"deposit_status": "Deposite recieved", "contract_status": "completed"},
+        )
         row = build_all_clients_row_values(client, {"progress": 80, "pending_tasks": ["A"], "all_tasks": ["A", "B"]})
 
         self.assertEqual(row[0], "Nora")
@@ -136,8 +150,9 @@ class ClientManagerTests(unittest.TestCase):
         self.assertEqual(row[2], "Consulting")
         self.assertEqual(row[3], "12")
         self.assertEqual(row[4], "EM-2048")
-        self.assertEqual(row[5], "80%")
-        self.assertEqual(row[6], "1 / 2")
+        self.assertEqual(row[5], "Completed")
+        self.assertEqual(row[6], "80%")
+        self.assertEqual(row[7], "1 / 2")
 
     def test_client_reservation_status_round_trips(self):
         client = Client(
@@ -183,6 +198,32 @@ class ClientManagerTests(unittest.TestCase):
 
         self.assertEqual(pending["deposit_status"], "Deposite not recieved")
         self.assertEqual(pending["contract_status"], "under progress")
+
+    def test_reservation_save_keeps_full_client_record_in_sync(self):
+        client = Client(
+            "Nora",
+            "+9685551234",
+            "Consulting",
+            "nora@example.com",
+            "12",
+            electrical_meter="28609687",
+            reservation_status={"deposit_status": "Deposite not recieved", "contract_status": "under progress"},
+        )
+        client.reservation_status = {
+            "client_name": "Nora",
+            "contact": "+9685551234",
+            "shop_number": "12",
+            "deposit_status": "Deposite recieved",
+            "contract_status": "completed",
+        }
+
+        row = build_all_clients_row_values(client, {"progress": 80, "pending_tasks": ["A"], "all_tasks": ["A", "B"]})
+
+        self.assertEqual(client.electrical_meter, "28609687")
+        self.assertEqual(client.reservation_status["deposit_status"], "Deposite recieved")
+        self.assertEqual(client.reservation_status["contract_status"], "completed")
+        self.assertEqual(row[4], "28609687")
+        self.assertEqual(row[5], "Completed")
 
     def test_load_client_data_with_ui_like_field_names(self):
         with open(self.file_path, "w", encoding="utf-8") as file:
